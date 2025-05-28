@@ -233,6 +233,67 @@ const RunDetailsPanel = ({ route }) => {
     elevationGain: 0,
     activityType: 'run' // 'run' or 'bike'
   });
+  
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [error, setError] = useState('');
+
+  // Handle creating fake run and downloading GPX
+  const handleCreateRun = async () => {
+    if (route.length < 2) {
+      setError('Please create a route with at least 2 points on the map');
+      return;
+    }
+
+    setIsGenerating(true);
+    setError('');
+
+    try {
+      const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8001';
+      
+      const response = await fetch(`${backendUrl}/api/generate-gpx`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          route: route,
+          runDetails: runDetails
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to generate GPX file');
+      }
+
+      // Get filename from response headers
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let filename = 'fake_run.gpx';
+      if (contentDisposition) {
+        const matches = contentDisposition.match(/filename="?([^"]+)"?/);
+        if (matches) {
+          filename = matches[1];
+        }
+      }
+
+      // Create blob and download
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+    } catch (error) {
+      console.error('Error generating GPX:', error);
+      setError(`Error: ${error.message}`);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
 
   // Calculate distance and update stats from route
   useEffect(() => {
