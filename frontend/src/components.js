@@ -183,25 +183,22 @@ const DrawableMap = ({ route, setRoute, mapCenter, setMapCenter }) => {
         )}
       </MapContainer>
       
-      {/* Route Controls - moved to bottom and converted to text */}
-      <div className="absolute bottom-4 left-4 bg-white bg-opacity-90 rounded-lg shadow-lg px-3 py-2 z-[1000]">
-        <div className="flex space-x-4 text-sm">
-          <button 
-            onClick={removeLastPoint}
-            disabled={routeCoordinates.length === 0}
-            className="text-blue-600 hover:text-blue-800 disabled:text-gray-400 disabled:cursor-not-allowed underline transition-colors"
-          >
-            Remove last point
-          </button>
-          <span className="text-gray-400">|</span>
-          <button 
-            onClick={clearRoute}
-            disabled={routeCoordinates.length === 0}
-            className="text-red-600 hover:text-red-800 disabled:text-gray-400 disabled:cursor-not-allowed underline transition-colors"
-          >
-            Clear route
-          </button>
-        </div>
+      {/* Route Controls - styled like orange buttons */}
+      <div className="absolute bottom-4 left-4 z-[1000] flex space-x-2">
+        <button 
+          onClick={removeLastPoint}
+          disabled={routeCoordinates.length === 0}
+          className="bg-orange-500 hover:bg-orange-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white px-3 py-2 rounded-lg shadow-lg text-sm font-medium transition-colors"
+        >
+          Remove last point
+        </button>
+        <button 
+          onClick={clearRoute}
+          disabled={routeCoordinates.length === 0}
+          className="bg-red-500 hover:bg-red-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white px-3 py-2 rounded-lg shadow-lg text-sm font-medium transition-colors"
+        >
+          Clear route
+        </button>
       </div>
 
       {/* Click instruction */}
