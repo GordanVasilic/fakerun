@@ -237,6 +237,13 @@ const RunDetailsPanel = ({ route, onRunDetailsChange }) => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState('');
 
+  // Notify parent component when runDetails change
+  useEffect(() => {
+    if (onRunDetailsChange) {
+      onRunDetailsChange(runDetails);
+    }
+  }, [runDetails, onRunDetailsChange]);
+
   // Format duration in h:mm:ss format
   const formatDuration = (seconds) => {
     const hours = Math.floor(seconds / 3600);
