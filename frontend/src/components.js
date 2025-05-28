@@ -993,13 +993,10 @@ export const CreateRouteMain = () => {
         </div>
       </div>
 
-      {/* Data Visualization - moved to left and made smaller */}
-      <div className="flex space-x-4 mx-4 mb-4">
-        <div className="w-1/2 bg-white rounded-lg shadow-lg">
+      {/* Data Visualization - same width as map */}
+      <div className="mx-4 mb-4">
+        <div className="bg-white rounded-lg shadow-lg">
           <DataVisualization route={route} runDetails={runDetails} />
-        </div>
-        <div className="w-1/2">
-          {/* Space for future content or empty for now */}
         </div>
       </div>
 
