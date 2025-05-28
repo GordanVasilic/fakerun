@@ -341,7 +341,7 @@ const RunDetailsPanel = ({ route }) => {
               <div className="flex items-center justify-center mb-2">
                 <Mountain className="w-5 h-5 text-green-500" />
               </div>
-              <div className="text-lg font-semibold text-green-600">{Math.round(parseFloat(runDetails.distance) * 5.5) || 0}m</div>
+              <div className="text-lg font-semibold text-green-600">{runDetails.elevationGain}m</div>
               <div className="text-xs text-gray-500">elevation gain</div>
             </div>
             
@@ -350,7 +350,7 @@ const RunDetailsPanel = ({ route }) => {
               <div className="flex items-center justify-center mb-2">
                 <Gauge className="w-5 h-5 text-purple-500" />
               </div>
-              <div className="text-lg font-semibold text-purple-600">{runDetails.avgPace}</div>
+              <div className="text-lg font-semibold text-purple-600">{formatPace(runDetails.avgPace)}</div>
               <div className="text-xs text-gray-500">avg pace min/km</div>
             </div>
           </div>
