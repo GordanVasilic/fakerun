@@ -486,7 +486,7 @@ const RunDetailsPanel = ({ route, onRunDetailsChange }) => {
                 <span className="text-orange-500 font-medium">{formatPace(runDetails.avgPace)} {runDetails.paceUnit}</span>
               </div>
               
-              {/* Slider and Input in same row */}
+              {/* Slider only - removed input box */}
               <div className="flex items-center space-x-3">
                 <input 
                   type="range" 
@@ -496,16 +496,6 @@ const RunDetailsPanel = ({ route, onRunDetailsChange }) => {
                   value={runDetails.avgPace}
                   onChange={handlePaceSliderChange}
                   className="flex-1 h-2 bg-orange-200 rounded-lg slider"
-                />
-                <input
-                  type="number"
-                  value={runDetails.avgPace.toFixed(1)}
-                  onChange={handlePaceInputChange}
-                  step="0.1"
-                  min="3.0"
-                  max="15.0"
-                  className="w-20 px-2 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm text-center"
-                  placeholder="6.0"
                 />
               </div>
               
