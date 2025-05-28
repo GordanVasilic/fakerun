@@ -983,10 +983,15 @@ export const CreateRouteMain = () => {
         </div>
       </div>
 
-      {/* Data Visualization - same width as map */}
-      <div className="mx-4 mb-4">
-        <div className="bg-white rounded-lg shadow-lg">
-          <DataVisualization route={route} runDetails={runDetails} />
+      {/* Data Visualization - positioned to match map width */}
+      <div className="flex space-x-4 px-4 mb-4">
+        <div className="flex-1">
+          <div className="bg-white rounded-lg shadow-lg">
+            <DataVisualization route={route} runDetails={runDetails} />
+          </div>
+        </div>
+        <div className="w-96">
+          {/* Empty space to match right panel width */}
         </div>
       </div>
 
