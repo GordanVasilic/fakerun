@@ -379,8 +379,8 @@ const RunDetailsPanel = ({ route, onRunDetailsChange }) => {
   };
 
   return (
-    <div className="h-full bg-gray-50 p-6 overflow-y-auto">
-      <div className="space-y-6">
+    <div className="h-full bg-gray-50 p-6">
+      <div className="space-y-6">{/* removed overflow-y-auto */}
         <div>
           <h2 className="text-xl font-semibold text-gray-900 mb-4">Run Details</h2>
           
