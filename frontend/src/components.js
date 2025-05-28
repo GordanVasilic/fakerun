@@ -443,39 +443,36 @@ const RunDetailsPanel = ({ route }) => {
         <div className="bg-white rounded-lg p-4">
           <h3 className="text-sm font-medium text-gray-700 mb-3">Pace Info</h3>
           <div className="space-y-4">
-            {/* Pace Input */}
+            {/* Pace Slider and Input Combined */}
             <div>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm">Target Pace</span>
                 <span className="text-orange-500 font-medium">{formatPace(runDetails.avgPace)} min/km</span>
               </div>
-              <input
-                type="number"
-                value={runDetails.avgPace.toFixed(1)}
-                onChange={handlePaceInputChange}
-                step="0.1"
-                min="3.0"
-                max="15.0"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm"
-                placeholder="Enter pace (min/km)"
-              />
-            </div>
-            
-            {/* Pace Slider */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm">Pace Slider</span>
-                <span className="text-sm text-gray-500">{runDetails.avgPace.toFixed(1)} min/km</span>
+              
+              {/* Slider and Input in same row */}
+              <div className="flex items-center space-x-3">
+                <input 
+                  type="range" 
+                  min="3.0" 
+                  max="12.0" 
+                  step="0.1"
+                  value={runDetails.avgPace}
+                  onChange={handlePaceSliderChange}
+                  className="flex-1 h-2 bg-orange-200 rounded-lg slider"
+                />
+                <input
+                  type="number"
+                  value={runDetails.avgPace.toFixed(1)}
+                  onChange={handlePaceInputChange}
+                  step="0.1"
+                  min="3.0"
+                  max="15.0"
+                  className="w-20 px-2 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm text-center"
+                  placeholder="6.0"
+                />
               </div>
-              <input 
-                type="range" 
-                min="3.0" 
-                max="12.0" 
-                step="0.1"
-                value={runDetails.avgPace}
-                onChange={handlePaceSliderChange}
-                className="w-full h-2 bg-orange-200 rounded-lg slider"
-              />
+              
               <div className="flex justify-between text-xs text-gray-500 mt-1">
                 <span>3:00</span>
                 <span>12:00</span>
