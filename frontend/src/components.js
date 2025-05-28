@@ -372,9 +372,17 @@ const RunDetailsPanel = ({ route, onRunDetailsChange }) => {
   };
 
   // Format pace for display
-  const formatPace = (pace) => {
-    const minutes = Math.floor(pace);
-    const seconds = Math.round((pace - minutes) * 60);
+  const formatPace = (pace, unit = runDetails.paceUnit) => {
+    // Convert pace if needed
+    let displayPace = pace;
+    if (unit === 'min/mi' && runDetails.paceUnit === 'min/km') {
+      displayPace = pace * 1.60934; // Convert km to mile pace
+    } else if (unit === 'min/km' && runDetails.paceUnit === 'min/mi') {
+      displayPace = pace / 1.60934; // Convert mile to km pace
+    }
+    
+    const minutes = Math.floor(displayPace);
+    const seconds = Math.round((displayPace - minutes) * 60);
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
