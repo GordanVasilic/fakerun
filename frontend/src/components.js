@@ -966,6 +966,11 @@ export const CreateRouteMain = () => {
                   <MapPin className="w-4 h-4" />
                 </button>
               </form>
+              
+              {/* Click instruction - moved under search bar */}
+              <div className="mt-3 bg-orange-500 text-white px-3 py-2 rounded-lg shadow-lg">
+                <div className="text-sm font-medium">Click on map to add points</div>
+              </div>
             </div>
             
             <DrawableMap 
