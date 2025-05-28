@@ -201,11 +201,6 @@ const DrawableMap = ({ route, setRoute, mapCenter, setMapCenter }) => {
         </button>
       </div>
 
-      {/* Click instruction */}
-      <div className="absolute bottom-16 left-4 bg-orange-500 text-white px-3 py-2 rounded-lg shadow-lg z-[1000]">
-        <div className="text-sm font-medium">Click on map to add points</div>
-      </div>
-
       {/* Zoom Controls - moved to bottom right */}
       <div className="absolute bottom-4 right-4 bg-white rounded-lg shadow-lg p-1 z-[1000]">
         <div className="flex flex-col">
