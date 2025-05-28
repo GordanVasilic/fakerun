@@ -63,25 +63,91 @@ export const Header = () => {
   );
 };
 
-const DrawableMap = ({ route, setRoute }) => {
+const DrawableMap = ({ route, setRoute, mapCenter, setMapCenter }) => {
   const [isDrawing, setIsDrawing] = useState(false);
-  const [drawingMode, setDrawingMode] = useState('draw'); // 'draw', 'point', 'line'
+  const [drawingMode, setDrawingMode] = useState('draw');
+  const [routeCoordinates, setRouteCoordinates] = useState([]);
   
+  // Component to handle search and map centering
+  const MapController = ({ center }) => {
+    const map = useMap();
+    
+    useEffect(() => {
+      if (center) {
+        map.setView(center, 15);
+      }
+    }, [center, map]);
+    
+    return null;
+  };
+
+  // Component to handle map clicks and route building
   const MapEvents = () => {
+    const map = useMap();
+    
     useMapEvents({
-      click(e) {
-        if (isDrawing && drawingMode === 'draw') {
-          setRoute(prev => [...prev, [e.latlng.lat, e.latlng.lng]]);
+      async click(e) {
+        if (isDrawing) {
+          const newPoint = [e.latlng.lat, e.latlng.lng];
+          
+          if (routeCoordinates.length === 0) {
+            // First point
+            setRouteCoordinates([newPoint]);
+            setRoute([newPoint]);
+          } else {
+            // Get route from last point to new point using routing service
+            const lastPoint = routeCoordinates[routeCoordinates.length - 1];
+            try {
+              const routeSegment = await getRoute(lastPoint, newPoint);
+              if (routeSegment && routeSegment.length > 0) {
+                const newRouteCoords = [...routeCoordinates, ...routeSegment.slice(1)];
+                setRouteCoordinates(newRouteCoords);
+                setRoute(newRouteCoords);
+              } else {
+                // Fallback to direct line if routing fails
+                const newRouteCoords = [...routeCoordinates, newPoint];
+                setRouteCoordinates(newRouteCoords);
+                setRoute(newRouteCoords);
+              }
+            } catch (error) {
+              console.log('Routing failed, using direct line:', error);
+              const newRouteCoords = [...routeCoordinates, newPoint];
+              setRouteCoordinates(newRouteCoords);
+              setRoute(newRouteCoords);
+            }
+          }
         }
       },
     });
     return null;
   };
 
+  // Function to get route between two points using OpenRouteService
+  const getRoute = async (start, end) => {
+    try {
+      const response = await fetch(`https://api.openrouteservice.org/v2/directions/foot-walking?api_key=5b3ce3597851110001cf6248d5a0c06e3c9c4c4f9f8f4a4b8f9f4a4b&start=${start[1]},${start[0]}&end=${end[1]},${end[0]}`);
+      const data = await response.json();
+      
+      if (data.features && data.features[0] && data.features[0].geometry) {
+        const coordinates = data.features[0].geometry.coordinates;
+        return coordinates.map(coord => [coord[1], coord[0]]); // Convert [lng,lat] to [lat,lng]
+      }
+      return null;
+    } catch (error) {
+      console.log('Routing service error:', error);
+      return null;
+    }
+  };
+
+  const clearRoute = () => {
+    setRoute([]);
+    setRouteCoordinates([]);
+  };
+
   return (
     <div className="relative h-full">
       <MapContainer 
-        center={[40.7128, -74.0060]} 
+        center={mapCenter} 
         zoom={13} 
         className="h-full w-full"
         zoomControl={false}
@@ -90,17 +156,26 @@ const DrawableMap = ({ route, setRoute }) => {
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         />
+        <MapController center={mapCenter} />
         <MapEvents />
+        
         {route.length > 1 && (
           <Polyline 
             positions={route} 
             color="#F97316" 
             weight={4}
+            opacity={0.8}
           />
         )}
-        {route.map((position, idx) => (
-          <Marker key={idx} position={position} />
-        ))}
+        
+        {routeCoordinates.length > 0 && (
+          <>
+            <Marker position={routeCoordinates[0]} />
+            {routeCoordinates.length > 1 && (
+              <Marker position={routeCoordinates[routeCoordinates.length - 1]} />
+            )}
+          </>
+        )}
       </MapContainer>
       
       {/* Map Controls */}
@@ -108,24 +183,39 @@ const DrawableMap = ({ route, setRoute }) => {
         <div className="flex flex-col space-y-2">
           <button
             onClick={() => setIsDrawing(!isDrawing)}
-            className={`p-2 rounded ${isDrawing ? 'bg-orange-500 text-white' : 'bg-gray-100 hover:bg-gray-200'}`}
+            className={`p-2 rounded transition-colors ${isDrawing ? 'bg-orange-500 text-white' : 'bg-gray-100 hover:bg-gray-200'}`}
+            title={isDrawing ? 'Stop Drawing' : 'Start Drawing Route'}
           >
             <Edit3 className="w-4 h-4" />
           </button>
-          <button className="p-2 bg-gray-100 hover:bg-gray-200 rounded">
+          <button 
+            className="p-2 bg-gray-100 hover:bg-gray-200 rounded transition-colors"
+            title="Point Mode"
+          >
             <MapPin className="w-4 h-4" />
           </button>
-          <button className="p-2 bg-gray-100 hover:bg-gray-200 rounded">
-            <MoreHorizontal className="w-4 h-4" />
+          <button 
+            onClick={clearRoute}
+            className="p-2 bg-red-100 hover:bg-red-200 text-red-600 rounded transition-colors"
+            title="Clear Route"
+          >
+            <Trash2 className="w-4 h-4" />
           </button>
         </div>
       </div>
 
+      {/* Drawing Status */}
+      {isDrawing && (
+        <div className="absolute top-4 left-20 bg-orange-500 text-white px-3 py-2 rounded-lg shadow-lg z-[1000]">
+          <div className="text-sm font-medium">Click on map to add points</div>
+        </div>
+      )}
+
       {/* Zoom Controls */}
       <div className="absolute top-4 right-4 bg-white rounded-lg shadow-lg p-1 z-[1000]">
         <div className="flex flex-col">
-          <button className="p-2 hover:bg-gray-100 text-lg font-bold">+</button>
-          <button className="p-2 hover:bg-gray-100 text-lg font-bold">−</button>
+          <button className="p-2 hover:bg-gray-100 text-lg font-bold transition-colors">+</button>
+          <button className="p-2 hover:bg-gray-100 text-lg font-bold transition-colors">−</button>
         </div>
       </div>
     </div>
