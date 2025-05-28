@@ -122,20 +122,39 @@ const DrawableMap = ({ route, setRoute, mapCenter, setMapCenter }) => {
     return null;
   };
 
-  // Function to get route between two points using OpenRouteService
+  // Function to get route between two points using OSRM (free routing service)
   const getRoute = async (start, end) => {
     try {
-      const response = await fetch(`https://api.openrouteservice.org/v2/directions/foot-walking?api_key=5b3ce3597851110001cf6248d5a0c06e3c9c4c4f9f8f4a4b8f9f4a4b&start=${start[1]},${start[0]}&end=${end[1]},${end[0]}`);
+      // Using OSRM demo server (free, no API key needed)
+      const response = await fetch(
+        `https://router.project-osrm.org/route/v1/foot/${start[1]},${start[0]};${end[1]},${end[0]}?overview=full&geometries=geojson`
+      );
       const data = await response.json();
       
-      if (data.features && data.features[0] && data.features[0].geometry) {
-        const coordinates = data.features[0].geometry.coordinates;
+      if (data.routes && data.routes[0] && data.routes[0].geometry) {
+        const coordinates = data.routes[0].geometry.coordinates;
         return coordinates.map(coord => [coord[1], coord[0]]); // Convert [lng,lat] to [lat,lng]
       }
       return null;
     } catch (error) {
-      console.log('Routing service error:', error);
-      return null;
+      console.log('OSRM routing failed, trying alternative:', error);
+      
+      // Fallback to MapBox routing (if OSRM fails)
+      try {
+        const response = await fetch(
+          `https://api.mapbox.com/directions/v5/mapbox/walking/${start[1]},${start[0]};${end[1]},${end[0]}?geometries=geojson&access_token=pk.eyJ1IjoibWFwYm94IiwiYSI6ImNpejY4NXVycTA2emYycXBndHRqcmZ3N3gifQ.rJcFIG214AriISLbB6B5aw`
+      );
+        const data = await response.json();
+        
+        if (data.routes && data.routes[0] && data.routes[0].geometry) {
+          const coordinates = data.routes[0].geometry.coordinates;
+          return coordinates.map(coord => [coord[1], coord[0]]); // Convert [lng,lat] to [lat,lng]
+        }
+        return null;
+      } catch (fallbackError) {
+        console.log('All routing services failed, using direct line');
+        return null;
+      }
     }
   };
 
