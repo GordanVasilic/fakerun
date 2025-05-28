@@ -221,7 +221,7 @@ const DrawableMap = ({ route, setRoute, mapCenter, setMapCenter }) => {
   );
 };
 
-const RunDetailsPanel = ({ route }) => {
+const RunDetailsPanel = ({ route, onRunDetailsChange }) => {
   const [runDetails, setRunDetails] = useState({
     name: 'Morning Run',
     date: '2026-05-29',
