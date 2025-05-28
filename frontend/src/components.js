@@ -703,36 +703,6 @@ export const CreateRouteMain = () => {
               mapCenter={mapCenter}
               setMapCenter={setMapCenter}
             />
-            
-            {/* Bottom overlay with drawing tools */}
-            <div className="absolute bottom-4 left-4 bg-white rounded-lg shadow-lg p-4 z-[1000]">
-              <div className="text-sm text-gray-600 mb-2">Choose a shape or draw manually</div>
-              <div className="flex space-x-2">
-                <button className="bg-orange-500 text-white px-3 py-2 rounded flex items-center space-x-1">
-                  <Edit3 className="w-4 h-4" />
-                  <span>Draw</span>
-                </button>
-                <button className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-2 rounded flex items-center space-x-1">
-                  <MapPin className="w-4 h-4" />
-                  <span>Point</span>
-                </button>
-                <button className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-2 rounded flex items-center space-x-1">
-                  <MoreHorizontal className="w-4 h-4" />
-                  <span>Line</span>
-                </button>
-              </div>
-              <div className="mt-2 flex items-center space-x-2">
-                <input type="checkbox" id="show-waypoints" className="rounded" />
-                <label htmlFor="show-waypoints" className="text-sm text-gray-600">Show Waypoints</label>
-              </div>
-              {route.length > 0 && (
-                <div className="mt-2 pt-2 border-t border-gray-200">
-                  <div className="text-xs text-gray-500">
-                    Route points: {route.length} | Distance: {(route.length * 0.1).toFixed(2)}km
-                  </div>
-                </div>
-              )}
-            </div>
           </div>
         </div>
 
