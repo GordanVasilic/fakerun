@@ -407,23 +407,6 @@ const RunDetailsPanel = ({ route }) => {
                 <span>12:00</span>
               </div>
             </div>
-            
-            {/* Pace Variability */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm">Pace Variability</span>
-                <span className="text-sm">{runDetails.paceVariability}%</span>
-              </div>
-              <input 
-                type="range" 
-                min="0" 
-                max="100" 
-                value={runDetails.paceVariability}
-                onChange={(e) => setRunDetails(prev => ({...prev, paceVariability: e.target.value}))}
-                className="w-full h-2 bg-gray-200 rounded-lg slider"
-              />
-              <div className="text-xs text-gray-500 mt-1">Affects pace throughout the run versus GPX effort</div>
-            </div>
           </div>
         </div>
 
