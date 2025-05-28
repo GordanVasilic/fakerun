@@ -518,9 +518,24 @@ const RunDetailsPanel = ({ route }) => {
           />
         </div>
 
+        {/* Error Display */}
+        {error && (
+          <div className="p-3 bg-red-100 border border-red-400 text-red-700 rounded-md">
+            {error}
+          </div>
+        )}
+
         {/* Create Button */}
-        <button className="w-full bg-orange-500 hover:bg-orange-600 text-white font-semibold py-3 px-4 rounded-md transition-colors">
-          Create Fake Run
+        <button 
+          onClick={handleCreateRun}
+          disabled={isGenerating || route.length < 2}
+          className={`w-full font-semibold py-3 px-4 rounded-md transition-colors ${
+            isGenerating || route.length < 2
+              ? 'bg-gray-400 cursor-not-allowed text-white'
+              : 'bg-orange-500 hover:bg-orange-600 text-white'
+          }`}
+        >
+          {isGenerating ? 'Generating GPX...' : 'Create Fake Run'}
         </button>
       </div>
     </div>
