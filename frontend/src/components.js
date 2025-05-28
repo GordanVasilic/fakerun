@@ -463,7 +463,7 @@ const RunDetailsPanel = ({ route, onRunDetailsChange }) => {
             <div>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm">Target Pace</span>
-                <span className="text-orange-500 font-medium">{formatPace(runDetails.avgPace)} min/km</span>
+                <span className="text-orange-500 font-medium">{formatPace(runDetails.avgPace)} {runDetails.paceUnit}</span>
               </div>
               
               {/* Slider and Input in same row */}
