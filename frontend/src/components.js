@@ -231,7 +231,8 @@ const RunDetailsPanel = ({ route, onRunDetailsChange }) => {
     distance: 0,
     duration: 0,
     elevationGain: 0,
-    activityType: 'run' // 'run' or 'bike'
+    activityType: 'run', // 'run' or 'bike'
+    paceUnit: 'min/km' // 'min/km' or 'min/mi'
   });
   
   const [isGenerating, setIsGenerating] = useState(false);
