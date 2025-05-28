@@ -486,6 +486,32 @@ const RunDetailsPanel = ({ route, onRunDetailsChange }) => {
                 <span>12:00</span>
               </div>
             </div>
+
+            {/* Pace Unit Toggle */}
+            <div className="flex justify-center mt-3">
+              <div className="flex bg-gray-200 rounded-lg p-1">
+                <button
+                  onClick={() => setRunDetails(prev => ({...prev, paceUnit: 'min/km'}))}
+                  className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                    runDetails.paceUnit === 'min/km'
+                      ? 'bg-orange-500 text-white'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  min/km
+                </button>
+                <button
+                  onClick={() => setRunDetails(prev => ({...prev, paceUnit: 'min/mi'}))}
+                  className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                    runDetails.paceUnit === 'min/mi'
+                      ? 'bg-orange-500 text-white'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  min/mi
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 
