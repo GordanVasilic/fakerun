@@ -73,6 +73,26 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Pydantic models for GPX generation
+class CoordinatePoint(BaseModel):
+    lat: float
+    lng: float
+
+class RunDetails(BaseModel):
+    name: str
+    date: str  # YYYY-MM-DD format
+    startTime: str  # HH:MM format
+    description: Optional[str] = ""
+    avgPace: float  # minutes per km
+    distance: float
+    duration: int  # seconds
+    elevationGain: int
+    activityType: str  # 'run' or 'bike'
+
+class GPXGenerationRequest(BaseModel):
+    route: List[List[float]]  # List of [lat, lng] pairs
+    runDetails: RunDetails
+
 @app.on_event("shutdown")
 async def shutdown_db_client():
     client.close()
