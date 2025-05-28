@@ -891,7 +891,7 @@ export const CreateRouteMain = () => {
 
       {/* Data Visualization */}
       <div className="bg-white mx-4 mb-4 rounded-lg shadow-lg">
-        <DataVisualization />
+        <DataVisualization route={route} runDetails={runDetails} />
       </div>
 
       {/* Footer */}
