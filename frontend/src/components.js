@@ -524,8 +524,30 @@ const DataVisualization = () => {
 export const CreateRouteMain = () => {
   const [route, setRoute] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [mapCenter, setMapCenter] = useState([40.7128, -74.0060]); // Default to NYC
+  const [mapCenter, setMapCenter] = useState([40.7128, -74.0060]); // Default to NYC, will be updated with user location
   const [isSearching, setIsSearching] = useState(false);
+
+  // Get user's current location on component mount
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          setMapCenter([latitude, longitude]);
+          console.log('User location set:', latitude, longitude);
+        },
+        (error) => {
+          console.log('Geolocation failed, using default location (NYC):', error);
+          // Keep default NYC location if geolocation fails
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 600000 // Cache for 10 minutes
+        }
+      );
+    }
+  }, []);
 
   // Function to search for locations using Nominatim API
   const searchLocation = async (query) => {
