@@ -440,37 +440,37 @@ const RunDetailsPanel = ({ route, onRunDetailsChange }) => {
             {/* Distance */}
             <div className="text-center">
               <div className="flex items-center justify-center mb-2">
-                <Route className="w-5 h-5 text-orange-500" />
+                <Route className="w-7 h-7 text-orange-500" />
               </div>
-              <div className="text-orange-500 text-lg font-semibold">{runDetails.distance}</div>
-              <div className="text-xs text-gray-500">kilometers</div>
+              <div className="text-orange-500 text-2xl font-bold">{runDetails.distance}</div>
+              <div className="text-sm text-gray-500">kilometers</div>
             </div>
             
             {/* Duration */}
             <div className="text-center">
               <div className="flex items-center justify-center mb-2">
-                <Clock className="w-5 h-5 text-blue-500" />
+                <Clock className="w-7 h-7 text-blue-500" />
               </div>
               <div className="text-2xl font-bold">{formatDuration(runDetails.duration)}</div>
-              <div className="text-xs text-gray-500">duration</div>
+              <div className="text-sm text-gray-500">duration</div>
             </div>
             
             {/* Elevation Gain */}
             <div className="text-center">
               <div className="flex items-center justify-center mb-2">
-                <Mountain className="w-5 h-5 text-green-500" />
+                <Mountain className="w-7 h-7 text-green-500" />
               </div>
-              <div className="text-lg font-semibold text-green-600">{runDetails.elevationGain}m</div>
-              <div className="text-xs text-gray-500">elevation gain</div>
+              <div className="text-2xl font-bold text-green-600">{runDetails.elevationGain}m</div>
+              <div className="text-sm text-gray-500">elevation gain</div>
             </div>
             
             {/* Average Pace */}
             <div className="text-center">
               <div className="flex items-center justify-center mb-2">
-                <Gauge className="w-5 h-5 text-purple-500" />
+                <Gauge className="w-7 h-7 text-purple-500" />
               </div>
-              <div className="text-lg font-semibold text-purple-600">{formatPace(runDetails.avgPace)}</div>
-              <div className="text-xs text-gray-500">avg pace min/km</div>
+              <div className="text-2xl font-bold text-purple-600">{formatPace(runDetails.avgPace)}</div>
+              <div className="text-sm text-gray-500">avg pace {runDetails.paceUnit}</div>
             </div>
           </div>
         </div>
