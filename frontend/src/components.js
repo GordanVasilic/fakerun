@@ -65,7 +65,6 @@ export const Header = () => {
 
 const DrawableMap = ({ route, setRoute, mapCenter, setMapCenter }) => {
   const [isDrawing, setIsDrawing] = useState(false);
-  const [drawingMode, setDrawingMode] = useState('draw');
   const [routeCoordinates, setRouteCoordinates] = useState([]);
   
   // Component to handle search and map centering
@@ -83,8 +82,6 @@ const DrawableMap = ({ route, setRoute, mapCenter, setMapCenter }) => {
 
   // Component to handle map clicks and route building
   const MapEvents = () => {
-    const map = useMap();
-    
     useMapEvents({
       async click(e) {
         if (isDrawing) {
@@ -137,24 +134,8 @@ const DrawableMap = ({ route, setRoute, mapCenter, setMapCenter }) => {
       }
       return null;
     } catch (error) {
-      console.log('OSRM routing failed, trying alternative:', error);
-      
-      // Fallback to MapBox routing (if OSRM fails)
-      try {
-        const response = await fetch(
-          `https://api.mapbox.com/directions/v5/mapbox/walking/${start[1]},${start[0]};${end[1]},${end[0]}?geometries=geojson&access_token=pk.eyJ1IjoibWFwYm94IiwiYSI6ImNpejY4NXVycTA2emYycXBndHRqcmZ3N3gifQ.rJcFIG214AriISLbB6B5aw`
-      );
-        const data = await response.json();
-        
-        if (data.routes && data.routes[0] && data.routes[0].geometry) {
-          const coordinates = data.routes[0].geometry.coordinates;
-          return coordinates.map(coord => [coord[1], coord[0]]); // Convert [lng,lat] to [lat,lng]
-        }
-        return null;
-      } catch (fallbackError) {
-        console.log('All routing services failed, using direct line');
-        return null;
-      }
+      console.log('OSRM routing failed:', error);
+      return null;
     }
   };
 
@@ -564,87 +545,88 @@ export const CreateRouteMain = () => {
         {/* Left Panel - Map */}
         <div className="flex-1">
           <div className="bg-white rounded-lg shadow-lg h-full overflow-hidden relative">
-          <div className="absolute top-4 left-4 right-4 z-[1000]">
-            <h1 className="text-2xl font-bold text-gray-900 mb-4">Create Your Custom Route</h1>
-            <form onSubmit={handleSearchSubmit} className="flex space-x-2">
-              <div className="flex-1 relative">
-                <input
-                  type="text"
-                  placeholder="Search for a location..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyPress={handleSearchKeyPress}
-                  className="w-full pl-10 pr-4 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent shadow-sm"
-                  disabled={isSearching}
-                />
-                <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
-                {isSearching && (
-                  <div className="absolute right-3 top-2.5">
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-orange-500"></div>
-                  </div>
-                )}
-              </div>
-              <button 
-                type="submit"
-                disabled={isSearching || !searchQuery.trim()}
-                className="bg-orange-500 hover:bg-orange-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg flex items-center space-x-1 shadow-sm transition-colors"
-              >
-                <Search className="w-4 h-4" />
-              </button>
-              <button 
-                type="button"
-                onClick={() => navigator.geolocation?.getCurrentPosition(
-                  (position) => {
-                    setMapCenter([position.coords.latitude, position.coords.longitude]);
-                  },
-                  (error) => {
-                    console.error('Geolocation error:', error);
-                    alert('Unable to get your location. Please search for a location instead.');
-                  }
-                )}
-                className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg shadow-sm transition-colors"
-                title="Use current location"
-              >
-                <MapPin className="w-4 h-4" />
-              </button>
-            </form>
-          </div>
-          
-          <DrawableMap 
-            route={route} 
-            setRoute={setRoute} 
-            mapCenter={mapCenter}
-            setMapCenter={setMapCenter}
-          />
-          
-          {/* Bottom overlay with drawing tools */}
-          <div className="absolute bottom-4 left-4 bg-white rounded-lg shadow-lg p-4 z-[1000]">
-            <div className="text-sm text-gray-600 mb-2">Choose a shape or draw manually</div>
-            <div className="flex space-x-2">
-              <button className="bg-orange-500 text-white px-3 py-2 rounded flex items-center space-x-1">
-                <Edit3 className="w-4 h-4" />
-                <span>Draw</span>
-              </button>
-              <button className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-2 rounded flex items-center space-x-1">
-                <MapPin className="w-4 h-4" />
-                <span>Point</span>
-              </button>
-              <button className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-2 rounded flex items-center space-x-1">
-                <MoreHorizontal className="w-4 h-4" />
-                <span>Line</span>
-              </button>
-            </div>
-            <div className="mt-2 flex items-center space-x-2">
-              <input type="checkbox" id="show-waypoints" className="rounded" />
-              <label htmlFor="show-waypoints" className="text-sm text-gray-600">Show Waypoints</label>
-            </div>
-            {route.length > 0 && (
-              <div className="mt-2 pt-2 border-t border-gray-200">
-                <div className="text-xs text-gray-500">
-                  Route points: {route.length} | Distance: {(route.length * 0.1).toFixed(2)}km
+            <div className="absolute top-4 left-4 right-4 z-[1000]">
+              <h1 className="text-2xl font-bold text-gray-900 mb-4">Create Your Custom Route</h1>
+              <form onSubmit={handleSearchSubmit} className="flex space-x-2">
+                <div className="flex-1 relative">
+                  <input
+                    type="text"
+                    placeholder="Search for a location..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onKeyPress={handleSearchKeyPress}
+                    className="w-full pl-10 pr-4 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent shadow-sm"
+                    disabled={isSearching}
+                  />
+                  <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
+                  {isSearching && (
+                    <div className="absolute right-3 top-2.5">
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-orange-500"></div>
+                    </div>
+                  )}
                 </div>
+                <button 
+                  type="submit"
+                  disabled={isSearching || !searchQuery.trim()}
+                  className="bg-orange-500 hover:bg-orange-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg flex items-center space-x-1 shadow-sm transition-colors"
+                >
+                  <Search className="w-4 h-4" />
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => navigator.geolocation?.getCurrentPosition(
+                    (position) => {
+                      setMapCenter([position.coords.latitude, position.coords.longitude]);
+                    },
+                    (error) => {
+                      console.error('Geolocation error:', error);
+                      alert('Unable to get your location. Please search for a location instead.');
+                    }
+                  )}
+                  className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg shadow-sm transition-colors"
+                  title="Use current location"
+                >
+                  <MapPin className="w-4 h-4" />
+                </button>
+              </form>
+            </div>
+            
+            <DrawableMap 
+              route={route} 
+              setRoute={setRoute} 
+              mapCenter={mapCenter}
+              setMapCenter={setMapCenter}
+            />
+            
+            {/* Bottom overlay with drawing tools */}
+            <div className="absolute bottom-4 left-4 bg-white rounded-lg shadow-lg p-4 z-[1000]">
+              <div className="text-sm text-gray-600 mb-2">Choose a shape or draw manually</div>
+              <div className="flex space-x-2">
+                <button className="bg-orange-500 text-white px-3 py-2 rounded flex items-center space-x-1">
+                  <Edit3 className="w-4 h-4" />
+                  <span>Draw</span>
+                </button>
+                <button className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-2 rounded flex items-center space-x-1">
+                  <MapPin className="w-4 h-4" />
+                  <span>Point</span>
+                </button>
+                <button className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-2 rounded flex items-center space-x-1">
+                  <MoreHorizontal className="w-4 h-4" />
+                  <span>Line</span>
+                </button>
               </div>
-            )}
+              <div className="mt-2 flex items-center space-x-2">
+                <input type="checkbox" id="show-waypoints" className="rounded" />
+                <label htmlFor="show-waypoints" className="text-sm text-gray-600">Show Waypoints</label>
+              </div>
+              {route.length > 0 && (
+                <div className="mt-2 pt-2 border-t border-gray-200">
+                  <div className="text-xs text-gray-500">
+                    Route points: {route.length} | Distance: {(route.length * 0.1).toFixed(2)}km
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -662,7 +644,7 @@ export const CreateRouteMain = () => {
       </div>
 
       {/* Footer */}
-      <footer className="bg-gray-50 border-t border-gray-200 py-4 px-6">
+      <footer className="bg-white border-t border-gray-200 py-4 px-6">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="text-sm text-gray-500">
             © 2026 FakeMyRun. All rights reserved.
