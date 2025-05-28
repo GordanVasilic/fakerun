@@ -560,14 +560,24 @@ const RunDetailsPanel = ({ route, onRunDetailsChange }) => {
 };
 
 const DataVisualization = ({ route, runDetails }) => {
+  // Default values if runDetails is not yet available
+  const defaultRunDetails = {
+    avgPace: 6.0,
+    elevationGain: 50,
+    distance: 5.0,
+    duration: 1800
+  };
+  
+  const details = runDetails || defaultRunDetails;
+  
   // Generate realistic data based on the actual route
   const generatePaceData = () => {
-    if (route.length < 2) {
+    if (!route || route.length < 2) {
       return {
         labels: ['0'],
         datasets: [{
           label: 'Pace',
-          data: [runDetails.avgPace],
+          data: [details.avgPace],
           borderColor: '#F97316',
           backgroundColor: 'rgba(249, 115, 22, 0.1)',
           tension: 0.4,
@@ -580,20 +590,19 @@ const DataVisualization = ({ route, runDetails }) => {
     const labels = [];
     const paceData = [];
     
-    // Calculate cumulative distance for labels
-    let totalDistance = 0;
+    // Calculate total distance for this route (simplified)
+    const totalDistance = details.distance;
+    
     for (let i = 0; i < numPoints; i++) {
+      const distanceAlongRoute = (totalDistance * i) / (numPoints - 1);
+      labels.push(distanceAlongRoute.toFixed(1));
+      
       if (i === 0) {
-        labels.push('0.0');
-        paceData.push(runDetails.avgPace);
+        paceData.push(details.avgPace);
       } else {
-        // Calculate distance between consecutive points
-        const segmentDistance = totalDistance * (i / (numPoints - 1));
-        labels.push(segmentDistance.toFixed(1));
-        
         // Generate realistic pace variation around target pace
         const variation = (Math.sin(i * 0.5) * 0.3) + (Math.random() - 0.5) * 0.4;
-        const pace = Math.max(3.0, Math.min(12.0, runDetails.avgPace + variation));
+        const pace = Math.max(3.0, Math.min(12.0, details.avgPace + variation));
         paceData.push(pace);
       }
     }
@@ -613,7 +622,7 @@ const DataVisualization = ({ route, runDetails }) => {
 
   // Generate elevation data based on route
   const generateElevationData = () => {
-    if (route.length < 2) {
+    if (!route || route.length < 2) {
       return {
         labels: ['0'],
         datasets: [{
@@ -631,20 +640,19 @@ const DataVisualization = ({ route, runDetails }) => {
     const labels = [];
     const elevationData = [];
     
-    let totalDistance = 0;
+    const totalDistance = details.distance;
     let currentElevation = 100; // Starting elevation
     
     for (let i = 0; i < numPoints; i++) {
+      const distanceAlongRoute = (totalDistance * i) / (numPoints - 1);
+      labels.push(distanceAlongRoute.toFixed(1));
+      
       if (i === 0) {
-        labels.push('0.0');
         elevationData.push(currentElevation);
       } else {
-        const segmentDistance = totalDistance * (i / (numPoints - 1));
-        labels.push(segmentDistance.toFixed(1));
-        
         // Simulate elevation changes based on total elevation gain
         const progressRatio = i / (numPoints - 1);
-        const baseElevationGain = runDetails.elevationGain * progressRatio;
+        const baseElevationGain = details.elevationGain * progressRatio;
         
         // Add some realistic variation
         const hillVariation = Math.sin(i * 0.8) * 15; // Hills and valleys
