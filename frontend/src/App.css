@@ -20,14 +20,11 @@ body {
 .slider {
   -webkit-appearance: none;
   appearance: none;
-  background: transparent;
-  cursor: pointer;
-}
-
-.slider::-webkit-slider-track {
-  background: #fed7aa;
   height: 8px;
+  background: #fed7aa;
   border-radius: 4px;
+  outline: none;
+  cursor: pointer;
 }
 
 .slider::-webkit-slider-thumb {
