@@ -183,30 +183,29 @@ const DrawableMap = ({ route, setRoute, mapCenter, setMapCenter }) => {
         )}
       </MapContainer>
       
-      {/* Route Controls */}
-      <div className="absolute top-4 left-4 bg-white rounded-lg shadow-lg p-2 z-[1000]">
-        <div className="flex flex-col space-y-2">
+      {/* Route Controls - moved to bottom and converted to text */}
+      <div className="absolute bottom-4 left-4 bg-white bg-opacity-90 rounded-lg shadow-lg px-3 py-2 z-[1000]">
+        <div className="flex space-x-4 text-sm">
           <button 
             onClick={removeLastPoint}
             disabled={routeCoordinates.length === 0}
-            className="p-2 bg-yellow-100 hover:bg-yellow-200 disabled:bg-gray-100 disabled:cursor-not-allowed text-yellow-600 disabled:text-gray-400 rounded transition-colors"
-            title="Remove Last Point"
+            className="text-blue-600 hover:text-blue-800 disabled:text-gray-400 disabled:cursor-not-allowed underline transition-colors"
           >
-            <Minus className="w-4 h-4" />
+            Remove last point
           </button>
+          <span className="text-gray-400">|</span>
           <button 
             onClick={clearRoute}
             disabled={routeCoordinates.length === 0}
-            className="p-2 bg-red-100 hover:bg-red-200 disabled:bg-gray-100 disabled:cursor-not-allowed text-red-600 disabled:text-gray-400 rounded transition-colors"
-            title="Clear Route"
+            className="text-red-600 hover:text-red-800 disabled:text-gray-400 disabled:cursor-not-allowed underline transition-colors"
           >
-            <Trash2 className="w-4 h-4" />
+            Clear route
           </button>
         </div>
       </div>
 
       {/* Click instruction */}
-      <div className="absolute top-4 left-20 bg-orange-500 text-white px-3 py-2 rounded-lg shadow-lg z-[1000]">
+      <div className="absolute bottom-16 left-4 bg-orange-500 text-white px-3 py-2 rounded-lg shadow-lg z-[1000]">
         <div className="text-sm font-medium">Click on map to add points</div>
       </div>
 
