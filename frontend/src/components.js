@@ -884,7 +884,7 @@ export const CreateRouteMain = () => {
         {/* Right Panel - Run Details */}
         <div className="w-96">
           <div className="bg-white rounded-lg shadow-lg h-[80vh]">
-            <RunDetailsPanel route={route} />
+            <RunDetailsPanel route={route} onRunDetailsChange={setRunDetails} />
           </div>
         </div>
       </div>
