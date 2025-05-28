@@ -64,7 +64,6 @@ export const Header = () => {
 };
 
 const DrawableMap = ({ route, setRoute, mapCenter, setMapCenter }) => {
-  const [isDrawing, setIsDrawing] = useState(false);
   const [routeCoordinates, setRouteCoordinates] = useState([]);
   
   // Component to handle search and map centering
@@ -80,38 +79,36 @@ const DrawableMap = ({ route, setRoute, mapCenter, setMapCenter }) => {
     return null;
   };
 
-  // Component to handle map clicks and route building
+  // Component to handle map clicks and route building - always active
   const MapEvents = () => {
     useMapEvents({
       async click(e) {
-        if (isDrawing) {
-          const newPoint = [e.latlng.lat, e.latlng.lng];
-          
-          if (routeCoordinates.length === 0) {
-            // First point
-            setRouteCoordinates([newPoint]);
-            setRoute([newPoint]);
-          } else {
-            // Get route from last point to new point using routing service
-            const lastPoint = routeCoordinates[routeCoordinates.length - 1];
-            try {
-              const routeSegment = await getRoute(lastPoint, newPoint);
-              if (routeSegment && routeSegment.length > 0) {
-                const newRouteCoords = [...routeCoordinates, ...routeSegment.slice(1)];
-                setRouteCoordinates(newRouteCoords);
-                setRoute(newRouteCoords);
-              } else {
-                // Fallback to direct line if routing fails
-                const newRouteCoords = [...routeCoordinates, newPoint];
-                setRouteCoordinates(newRouteCoords);
-                setRoute(newRouteCoords);
-              }
-            } catch (error) {
-              console.log('Routing failed, using direct line:', error);
+        const newPoint = [e.latlng.lat, e.latlng.lng];
+        
+        if (routeCoordinates.length === 0) {
+          // First point
+          setRouteCoordinates([newPoint]);
+          setRoute([newPoint]);
+        } else {
+          // Get route from last point to new point using routing service
+          const lastPoint = routeCoordinates[routeCoordinates.length - 1];
+          try {
+            const routeSegment = await getRoute(lastPoint, newPoint);
+            if (routeSegment && routeSegment.length > 0) {
+              const newRouteCoords = [...routeCoordinates, ...routeSegment.slice(1)];
+              setRouteCoordinates(newRouteCoords);
+              setRoute(newRouteCoords);
+            } else {
+              // Fallback to direct line if routing fails
               const newRouteCoords = [...routeCoordinates, newPoint];
               setRouteCoordinates(newRouteCoords);
               setRoute(newRouteCoords);
             }
+          } catch (error) {
+            console.log('Routing failed, using direct line:', error);
+            const newRouteCoords = [...routeCoordinates, newPoint];
+            setRouteCoordinates(newRouteCoords);
+            setRoute(newRouteCoords);
           }
         }
       },
@@ -144,12 +141,20 @@ const DrawableMap = ({ route, setRoute, mapCenter, setMapCenter }) => {
     setRouteCoordinates([]);
   };
 
+  const removeLastPoint = () => {
+    if (routeCoordinates.length > 0) {
+      const newCoords = routeCoordinates.slice(0, -1);
+      setRouteCoordinates(newCoords);
+      setRoute(newCoords);
+    }
+  };
+
   return (
     <div className="relative h-full">
       <MapContainer 
         center={mapCenter} 
         zoom={13} 
-        className="h-full w-full"
+        className="h-full w-full cursor-crosshair"
         zoomControl={false}
       >
         <TileLayer
@@ -178,25 +183,21 @@ const DrawableMap = ({ route, setRoute, mapCenter, setMapCenter }) => {
         )}
       </MapContainer>
       
-      {/* Map Controls */}
+      {/* Route Controls */}
       <div className="absolute top-4 left-4 bg-white rounded-lg shadow-lg p-2 z-[1000]">
         <div className="flex flex-col space-y-2">
-          <button
-            onClick={() => setIsDrawing(!isDrawing)}
-            className={`p-2 rounded transition-colors ${isDrawing ? 'bg-orange-500 text-white' : 'bg-gray-100 hover:bg-gray-200'}`}
-            title={isDrawing ? 'Stop Drawing' : 'Start Drawing Route'}
-          >
-            <Edit3 className="w-4 h-4" />
-          </button>
           <button 
-            className="p-2 bg-gray-100 hover:bg-gray-200 rounded transition-colors"
-            title="Point Mode"
+            onClick={removeLastPoint}
+            disabled={routeCoordinates.length === 0}
+            className="p-2 bg-yellow-100 hover:bg-yellow-200 disabled:bg-gray-100 disabled:cursor-not-allowed text-yellow-600 disabled:text-gray-400 rounded transition-colors"
+            title="Remove Last Point"
           >
-            <MapPin className="w-4 h-4" />
+            <Minus className="w-4 h-4" />
           </button>
           <button 
             onClick={clearRoute}
-            className="p-2 bg-red-100 hover:bg-red-200 text-red-600 rounded transition-colors"
+            disabled={routeCoordinates.length === 0}
+            className="p-2 bg-red-100 hover:bg-red-200 disabled:bg-gray-100 disabled:cursor-not-allowed text-red-600 disabled:text-gray-400 rounded transition-colors"
             title="Clear Route"
           >
             <Trash2 className="w-4 h-4" />
@@ -204,15 +205,13 @@ const DrawableMap = ({ route, setRoute, mapCenter, setMapCenter }) => {
         </div>
       </div>
 
-      {/* Drawing Status */}
-      {isDrawing && (
-        <div className="absolute top-4 left-20 bg-orange-500 text-white px-3 py-2 rounded-lg shadow-lg z-[1000]">
-          <div className="text-sm font-medium">Click on map to add points</div>
-        </div>
-      )}
+      {/* Click instruction */}
+      <div className="absolute top-4 left-20 bg-orange-500 text-white px-3 py-2 rounded-lg shadow-lg z-[1000]">
+        <div className="text-sm font-medium">Click on map to add points</div>
+      </div>
 
-      {/* Zoom Controls */}
-      <div className="absolute top-4 right-4 bg-white rounded-lg shadow-lg p-1 z-[1000]">
+      {/* Zoom Controls - moved to bottom right */}
+      <div className="absolute bottom-4 right-4 bg-white rounded-lg shadow-lg p-1 z-[1000]">
         <div className="flex flex-col">
           <button className="p-2 hover:bg-gray-100 text-lg font-bold transition-colors">+</button>
           <button className="p-2 hover:bg-gray-100 text-lg font-bold transition-colors">−</button>
