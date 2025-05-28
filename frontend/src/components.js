@@ -569,72 +569,75 @@ const RunDetailsPanel = ({ route, onRunDetailsChange }) => {
           </div>
         </div>
 
-        {/* Run Name */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Run Name</label>
-          <input
-            type="text"
-            value={runDetails.name}
-            onChange={(e) => setRunDetails(prev => ({...prev, name: e.target.value}))}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-          />
-        </div>
-
-        {/* Date */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
-          <input
-            type="date"
-            value={runDetails.date}
-            onChange={(e) => setRunDetails(prev => ({...prev, date: e.target.value}))}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-          />
-        </div>
-
-        {/* Start Time */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Start Time</label>
-          <div className="flex space-x-2">
+        {/* Run Details Form */}
+        <div className="bg-white rounded-lg p-4">
+          {/* Run Name */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Run Name</label>
             <input
-              type="time"
-              value={runDetails.startTime}
-              onChange={(e) => setRunDetails(prev => ({...prev, startTime: e.target.value}))}
-              className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+              type="text"
+              value={runDetails.name}
+              onChange={(e) => setRunDetails(prev => ({...prev, name: e.target.value}))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
             />
           </div>
-        </div>
 
-        {/* Description */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
-          <textarea
-            value={runDetails.description}
-            onChange={(e) => setRunDetails(prev => ({...prev, description: e.target.value}))}
-            placeholder="Great morning run through the park"
-            rows={3}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-          />
-        </div>
-
-        {/* Error Display */}
-        {error && (
-          <div className="p-3 bg-red-100 border border-red-400 text-red-700 rounded-md">
-            {error}
+          {/* Date */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
+            <input
+              type="date"
+              value={runDetails.date}
+              onChange={(e) => setRunDetails(prev => ({...prev, date: e.target.value}))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+            />
           </div>
-        )}
 
-        {/* Create Button */}
-        <button 
-          onClick={handleCreateRun}
-          disabled={isGenerating || route.length < 2}
-          className={`w-full font-semibold py-3 px-4 rounded-md transition-colors ${
-            isGenerating || route.length < 2
-              ? 'bg-gray-400 cursor-not-allowed text-white'
-              : 'bg-orange-500 hover:bg-orange-600 text-white'
-          }`}
-        >
-          {isGenerating ? 'Generating GPX...' : 'Create Fake Run'}
-        </button>
+          {/* Start Time */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Start Time</label>
+            <div className="flex space-x-2">
+              <input
+                type="time"
+                value={runDetails.startTime}
+                onChange={(e) => setRunDetails(prev => ({...prev, startTime: e.target.value}))}
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+              />
+            </div>
+          </div>
+
+          {/* Description */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+            <textarea
+              value={runDetails.description}
+              onChange={(e) => setRunDetails(prev => ({...prev, description: e.target.value}))}
+              placeholder="Great morning run through the park"
+              rows={3}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+            />
+          </div>
+
+          {/* Error Display */}
+          {error && (
+            <div className="p-3 bg-red-100 border border-red-400 text-red-700 rounded-md">
+              {error}
+            </div>
+          )}
+
+          {/* Create Button */}
+          <button 
+            onClick={handleCreateRun}
+            disabled={isGenerating || route.length < 2}
+            className={`w-full font-semibold py-3 px-4 rounded-md transition-colors ${
+              isGenerating || route.length < 2
+                ? 'bg-gray-400 cursor-not-allowed text-white'
+                : 'bg-orange-500 hover:bg-orange-600 text-white'
+            }`}
+          >
+            {isGenerating ? 'Generating GPX...' : 'Create Fake Run'}
+          </button>
+        </div>
       </div>
     </div>
   );
