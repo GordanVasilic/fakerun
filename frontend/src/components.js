@@ -552,7 +552,7 @@ export const CreateRouteMain = () => {
   };
 
   return (
-    <div className="flex flex-col h-screen">
+    <div className="flex flex-col h-screen bg-gray-50">
       {/* Main Content */}
       <div className="flex-1 flex">
         {/* Left Panel - Map */}
