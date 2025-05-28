@@ -415,8 +415,8 @@ const RunDetailsPanel = ({ route }) => {
               <div className="flex items-center justify-center mb-2">
                 <Clock className="w-5 h-5 text-blue-500" />
               </div>
-              <div className="text-2xl font-bold">{Math.floor(runDetails.duration / 60)}:{(runDetails.duration % 60).toString().padStart(2, '0')}</div>
-              <div className="text-xs text-gray-500">duration hms</div>
+              <div className="text-2xl font-bold">{formatDuration(runDetails.duration)}</div>
+              <div className="text-xs text-gray-500">duration</div>
             </div>
             
             {/* Elevation Gain */}
