@@ -754,6 +754,7 @@ const DataVisualization = ({ route, runDetails }) => {
 
 export const CreateRouteMain = () => {
   const [route, setRoute] = useState([]);
+  const [runDetails, setRunDetails] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [mapCenter, setMapCenter] = useState([40.7128, -74.0060]); // Default to NYC, will be updated with user location
   const [isSearching, setIsSearching] = useState(false);
