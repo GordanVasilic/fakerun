@@ -228,10 +228,10 @@ const RunDetailsPanel = ({ route }) => {
     startTime: '8:00',
     description: '',
     avgPace: 6.50, // Changed to number for easier calculations
-    paceVariability: 50,
     distance: 0,
     duration: 0,
-    elevationGain: 0
+    elevationGain: 0,
+    activityType: 'run' // 'run' or 'bike'
   });
 
   // Calculate distance and update stats from route
