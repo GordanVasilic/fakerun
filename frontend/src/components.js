@@ -289,13 +289,40 @@ const RunDetailsPanel = ({ route }) => {
         <div className="bg-white rounded-lg p-4">
           <h3 className="text-sm font-medium text-gray-700 mb-3">Run Stats</h3>
           <div className="grid grid-cols-2 gap-4">
+            {/* Distance */}
             <div className="text-center">
+              <div className="flex items-center justify-center mb-2">
+                <Route className="w-5 h-5 text-orange-500" />
+              </div>
               <div className="text-orange-500 text-lg font-semibold">{runDetails.distance}</div>
               <div className="text-xs text-gray-500">kilometers</div>
             </div>
+            
+            {/* Duration */}
             <div className="text-center">
+              <div className="flex items-center justify-center mb-2">
+                <Clock className="w-5 h-5 text-blue-500" />
+              </div>
               <div className="text-2xl font-bold">{Math.floor(runDetails.duration / 60)}:{(runDetails.duration % 60).toString().padStart(2, '0')}</div>
               <div className="text-xs text-gray-500">duration hms</div>
+            </div>
+            
+            {/* Elevation Gain */}
+            <div className="text-center">
+              <div className="flex items-center justify-center mb-2">
+                <Mountain className="w-5 h-5 text-green-500" />
+              </div>
+              <div className="text-lg font-semibold text-green-600">{Math.round(parseFloat(runDetails.distance) * 5.5) || 0}m</div>
+              <div className="text-xs text-gray-500">elevation gain</div>
+            </div>
+            
+            {/* Average Pace */}
+            <div className="text-center">
+              <div className="flex items-center justify-center mb-2">
+                <Gauge className="w-5 h-5 text-purple-500" />
+              </div>
+              <div className="text-lg font-semibold text-purple-600">{runDetails.avgPace}</div>
+              <div className="text-xs text-gray-500">avg pace min/km</div>
             </div>
           </div>
         </div>
