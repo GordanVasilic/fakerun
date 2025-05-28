@@ -994,9 +994,14 @@ export const CreateRouteMain = () => {
         </div>
       </div>
 
-      {/* Data Visualization */}
-      <div className="bg-white mx-4 mb-4 rounded-lg shadow-lg">
-        <DataVisualization route={route} runDetails={runDetails} />
+      {/* Data Visualization - moved to left and made smaller */}
+      <div className="flex space-x-4 mx-4 mb-4">
+        <div className="w-1/2 bg-white rounded-lg shadow-lg">
+          <DataVisualization route={route} runDetails={runDetails} />
+        </div>
+        <div className="w-1/2">
+          {/* Space for future content or empty for now */}
+        </div>
       </div>
 
       {/* Footer */}
