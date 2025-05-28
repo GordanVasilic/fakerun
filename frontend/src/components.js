@@ -302,13 +302,23 @@ const RunDetailsPanel = ({ route }) => {
         <div>
           <h2 className="text-xl font-semibold text-gray-900 mb-4">Run Details</h2>
           
-          {/* Basic/Pro toggle */}
+          {/* Run/Bike toggle */}
           <div className="flex bg-gray-200 rounded-lg p-1 mb-4">
-            <button className="flex-1 py-2 text-sm font-medium text-center bg-white rounded-md shadow-sm">
-              Basic
+            <button 
+              onClick={() => setRunDetails(prev => ({...prev, activityType: 'run'}))}
+              className={`flex-1 py-2 text-sm font-medium text-center rounded-md shadow-sm transition-colors ${
+                runDetails.activityType === 'run' ? 'bg-white text-gray-900' : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Run
             </button>
-            <button className="flex-1 py-2 text-sm font-medium text-center text-gray-600">
-              Pro
+            <button 
+              onClick={() => setRunDetails(prev => ({...prev, activityType: 'bike'}))}
+              className={`flex-1 py-2 text-sm font-medium text-center rounded-md shadow-sm transition-colors ${
+                runDetails.activityType === 'bike' ? 'bg-white text-gray-900' : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Bike
             </button>
           </div>
         </div>
