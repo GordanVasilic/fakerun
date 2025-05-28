@@ -632,7 +632,7 @@ export const CreateRouteMain = () => {
 
         {/* Right Panel - Run Details */}
         <div className="w-96">
-          <div className="bg-white rounded-lg shadow-lg h-full">
+          <div className="bg-white rounded-lg shadow-lg h-[80vh]">
             <RunDetailsPanel route={route} />
           </div>
         </div>
@@ -644,7 +644,7 @@ export const CreateRouteMain = () => {
       </div>
 
       {/* Footer */}
-      <footer className="bg-white border-t border-gray-200 py-4 px-6">
+      <footer className="bg-white border-t border-gray-200 py-4 px-6 mt-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="text-sm text-gray-500">
             © 2026 FakeMyRun. All rights reserved.
