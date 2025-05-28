@@ -385,27 +385,30 @@ const RunDetailsPanel = ({ route, onRunDetailsChange }) => {
             <h2 className="text-xl font-semibold text-gray-900">Run Details</h2>
             
             {/* Pace Unit Toggle - moved here */}
-            <div className="flex bg-gray-200 rounded-lg p-1">
-              <button
-                onClick={() => setRunDetails(prev => ({...prev, paceUnit: 'min/km'}))}
-                className={`px-3 py-1 text-sm rounded-md transition-colors ${
-                  runDetails.paceUnit === 'min/km'
-                    ? 'bg-orange-500 text-white'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                min/km
-              </button>
-              <button
-                onClick={() => setRunDetails(prev => ({...prev, paceUnit: 'min/mi'}))}
-                className={`px-3 py-1 text-sm rounded-md transition-colors ${
-                  runDetails.paceUnit === 'min/mi'
-                    ? 'bg-orange-500 text-white'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                min/mi
-              </button>
+            <div>
+              <div className="text-xs text-gray-600 mb-1 text-center">Pace unit</div>
+              <div className="flex bg-gray-200 rounded-lg p-1">
+                <button
+                  onClick={() => setRunDetails(prev => ({...prev, paceUnit: 'min/km'}))}
+                  className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                    runDetails.paceUnit === 'min/km'
+                      ? 'bg-orange-500 text-white'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  min/km
+                </button>
+                <button
+                  onClick={() => setRunDetails(prev => ({...prev, paceUnit: 'min/mi'}))}
+                  className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                    runDetails.paceUnit === 'min/mi'
+                      ? 'bg-orange-500 text-white'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  min/mi
+                </button>
+              </div>
             </div>
           </div>
           
