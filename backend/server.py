@@ -93,6 +93,98 @@ class GPXGenerationRequest(BaseModel):
     route: List[List[float]]  # List of [lat, lng] pairs
     runDetails: RunDetails
 
+def generate_gpx_content(route_coordinates: List[List[float]], run_details: RunDetails) -> str:
+    """
+    Generate GPX content from route coordinates and run details
+    """
+    # Create new GPX file
+    gpx = gpxpy.gpx.GPX()
+    
+    # Add metadata
+    gpx.name = run_details.name
+    gpx.description = run_details.description
+    gpx.creator = "FakeMyRun"
+    
+    # Create track
+    gpx_track = gpxpy.gpx.GPXTrack()
+    gpx_track.name = run_details.name
+    gpx_track.description = run_details.description
+    gpx.tracks.append(gpx_track)
+    
+    # Create track segment
+    gpx_segment = gpxpy.gpx.GPXTrackSegment()
+    gpx_track.segments.append(gpx_segment)
+    
+    # Parse start date and time
+    start_date = datetime.strptime(run_details.date, "%Y-%m-%d")
+    start_time_parts = run_details.startTime.split(":")
+    start_datetime = start_date.replace(
+        hour=int(start_time_parts[0]),
+        minute=int(start_time_parts[1]),
+        second=0
+    )
+    
+    # Calculate time between points based on pace and distance
+    total_points = len(route_coordinates)
+    total_duration_seconds = run_details.duration
+    time_per_point = total_duration_seconds / max(1, total_points - 1) if total_points > 1 else 0
+    
+    # Add route points with timestamps and elevation
+    current_time = start_datetime
+    base_elevation = 100  # Starting elevation in meters
+    
+    for i, coord in enumerate(route_coordinates):
+        lat, lng = coord[0], coord[1]
+        
+        # Calculate simulated elevation gain based on position in route
+        elevation_variation = (run_details.elevationGain * i / max(1, total_points - 1)) if total_points > 1 else 0
+        # Add some natural variation
+        elevation_noise = (i % 10 - 5) * 2  # Small variations
+        elevation = base_elevation + elevation_variation + elevation_noise
+        
+        # Create GPX point
+        gpx_point = gpxpy.gpx.GPXTrackPoint(
+            latitude=lat,
+            longitude=lng,
+            elevation=elevation,
+            time=current_time
+        )
+        
+        gpx_segment.points.append(gpx_point)
+        
+        # Move to next timestamp
+        current_time += timedelta(seconds=time_per_point)
+    
+    return gpx.to_xml()
+
+@app.post("/api/generate-gpx")
+async def generate_gpx_endpoint(request: GPXGenerationRequest):
+    """
+    Generate and return GPX file from route coordinates and run details
+    """
+    try:
+        if not request.route or len(request.route) < 2:
+            raise HTTPException(status_code=400, detail="Route must contain at least 2 points")
+        
+        # Generate GPX content
+        gpx_content = generate_gpx_content(request.route, request.runDetails)
+        
+        # Create filename
+        safe_name = "".join(c for c in request.runDetails.name if c.isalnum() or c in (' ', '-', '_')).rstrip()
+        safe_name = safe_name.replace(' ', '_')
+        filename = f"{safe_name}_{request.runDetails.date}.gpx"
+        
+        # Return GPX file
+        return Response(
+            content=gpx_content,
+            media_type="application/gpx+xml",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+        
+    except Exception as e:
+        logger.error(f"Error generating GPX: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error generating GPX file: {str(e)}")
+
 @app.on_event("shutdown")
 async def shutdown_db_client():
     client.close()
