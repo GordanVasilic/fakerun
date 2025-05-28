@@ -916,7 +916,9 @@ export const CreateRouteMain = () => {
         <div className="flex-1">
           <div className="bg-white rounded-lg shadow-lg h-[80vh] overflow-hidden relative">
             <div className="absolute top-4 left-4 right-4 z-[1000]">
-              <h1 className="text-2xl font-bold text-gray-900 mb-4">Create Your Custom Route</h1>
+              <div className="bg-white bg-opacity-90 rounded-lg shadow-lg px-4 py-3 mb-4">
+                <h1 className="text-2xl font-bold text-gray-900">Create Your Custom Route</h1>
+              </div>
               <form onSubmit={handleSearchSubmit} className="flex space-x-2">
                 <div className="flex-1 relative">
                   <input
