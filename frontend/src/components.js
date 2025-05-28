@@ -554,9 +554,10 @@ export const CreateRouteMain = () => {
   return (
     <div className="flex flex-col h-screen bg-gray-50">
       {/* Main Content */}
-      <div className="flex-1 flex">
+      <div className="flex-1 flex p-4 gap-4">
         {/* Left Panel - Map */}
-        <div className="flex-1 relative">
+        <div className="flex-1">
+          <div className="bg-white rounded-lg shadow-lg h-full overflow-hidden relative">
           <div className="absolute top-4 left-4 right-4 z-[1000]">
             <h1 className="text-2xl font-bold text-gray-900 mb-4">Create Your Custom Route</h1>
             <form onSubmit={handleSearchSubmit} className="flex space-x-2">
