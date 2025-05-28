@@ -649,8 +649,10 @@ export const CreateRouteMain = () => {
         </div>
 
         {/* Right Panel - Run Details */}
-        <div className="w-80">
-          <RunDetailsPanel route={route} />
+        <div className="w-96">
+          <div className="bg-white rounded-lg shadow-lg h-full">
+            <RunDetailsPanel route={route} />
+          </div>
         </div>
       </div>
 
