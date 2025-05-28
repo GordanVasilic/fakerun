@@ -570,7 +570,7 @@ const RunDetailsPanel = ({ route, onRunDetailsChange }) => {
         </div>
 
         {/* Run Details Form */}
-        <div className="bg-white rounded-lg p-4">
+        <div className="bg-white rounded-lg p-4 space-y-4">
           {/* Run Name */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Run Name</label>
