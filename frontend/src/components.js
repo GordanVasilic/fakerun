@@ -276,7 +276,13 @@ const RunDetailsPanel = ({ route }) => {
       setRunDetails(prev => ({ 
         ...prev, 
         distance: totalDistance.toFixed(2),
-        duration: Math.round(totalDistance * 8) // Assuming 8 min/km pace
+        duration: Math.round(totalDistance * 6) // Assuming 6 min/km pace for running
+      }));
+    } else {
+      setRunDetails(prev => ({ 
+        ...prev, 
+        distance: 0,
+        duration: 0
       }));
     }
   }, [route]);
