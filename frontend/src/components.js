@@ -552,36 +552,117 @@ const RunDetailsPanel = ({ route }) => {
   );
 };
 
-const DataVisualization = () => {
-  // Mock data for pace profile
-  const paceData = {
-    labels: Array.from({length: 20}, (_, i) => (i * 0.5).toFixed(1)),
-    datasets: [
-      {
+const DataVisualization = ({ route, runDetails }) => {
+  // Generate realistic data based on the actual route
+  const generatePaceData = () => {
+    if (route.length < 2) {
+      return {
+        labels: ['0'],
+        datasets: [{
+          label: 'Pace',
+          data: [runDetails.avgPace],
+          borderColor: '#F97316',
+          backgroundColor: 'rgba(249, 115, 22, 0.1)',
+          tension: 0.4,
+          fill: true,
+        }]
+      };
+    }
+
+    const numPoints = Math.min(route.length, 20);
+    const labels = [];
+    const paceData = [];
+    
+    // Calculate cumulative distance for labels
+    let totalDistance = 0;
+    for (let i = 0; i < numPoints; i++) {
+      if (i === 0) {
+        labels.push('0.0');
+        paceData.push(runDetails.avgPace);
+      } else {
+        // Calculate distance between consecutive points
+        const segmentDistance = totalDistance * (i / (numPoints - 1));
+        labels.push(segmentDistance.toFixed(1));
+        
+        // Generate realistic pace variation around target pace
+        const variation = (Math.sin(i * 0.5) * 0.3) + (Math.random() - 0.5) * 0.4;
+        const pace = Math.max(3.0, Math.min(12.0, runDetails.avgPace + variation));
+        paceData.push(pace);
+      }
+    }
+    
+    return {
+      labels,
+      datasets: [{
         label: 'Pace',
-        data: [6.8, 6.5, 6.3, 6.1, 5.9, 6.0, 6.2, 6.4, 6.1, 5.8, 5.9, 6.3, 6.5, 6.7, 6.4, 6.2, 6.0, 5.9, 6.1, 6.3],
+        data: paceData,
         borderColor: '#F97316',
         backgroundColor: 'rgba(249, 115, 22, 0.1)',
         tension: 0.4,
         fill: true,
-      },
-    ],
+      }]
+    };
   };
 
-  // Mock data for elevation profile
-  const elevationData = {
-    labels: Array.from({length: 20}, (_, i) => (i * 0.5).toFixed(1)),
-    datasets: [
-      {
+  // Generate elevation data based on route
+  const generateElevationData = () => {
+    if (route.length < 2) {
+      return {
+        labels: ['0'],
+        datasets: [{
+          label: 'Elevation',
+          data: [100],
+          borderColor: '#059669',
+          backgroundColor: 'rgba(5, 150, 105, 0.1)',
+          tension: 0.4,
+          fill: true,
+        }]
+      };
+    }
+
+    const numPoints = Math.min(route.length, 20);
+    const labels = [];
+    const elevationData = [];
+    
+    let totalDistance = 0;
+    let currentElevation = 100; // Starting elevation
+    
+    for (let i = 0; i < numPoints; i++) {
+      if (i === 0) {
+        labels.push('0.0');
+        elevationData.push(currentElevation);
+      } else {
+        const segmentDistance = totalDistance * (i / (numPoints - 1));
+        labels.push(segmentDistance.toFixed(1));
+        
+        // Simulate elevation changes based on total elevation gain
+        const progressRatio = i / (numPoints - 1);
+        const baseElevationGain = runDetails.elevationGain * progressRatio;
+        
+        // Add some realistic variation
+        const hillVariation = Math.sin(i * 0.8) * 15; // Hills and valleys
+        const noise = (Math.random() - 0.5) * 10; // Small variations
+        
+        currentElevation = 100 + baseElevationGain + hillVariation + noise;
+        elevationData.push(Math.max(50, currentElevation)); // Minimum 50m elevation
+      }
+    }
+    
+    return {
+      labels,
+      datasets: [{
         label: 'Elevation',
-        data: [10, 12, 15, 18, 22, 25, 23, 20, 18, 15, 12, 10, 8, 6, 9, 12, 15, 18, 16, 14],
+        data: elevationData,
         borderColor: '#059669',
         backgroundColor: 'rgba(5, 150, 105, 0.1)',
         tension: 0.4,
         fill: true,
-      },
-    ],
+      }]
+    };
   };
+
+  const paceData = generatePaceData();
+  const elevationData = generateElevationData();
 
   const chartOptions = {
     responsive: true,
