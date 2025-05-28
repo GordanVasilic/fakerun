@@ -491,6 +491,46 @@ const DataVisualization = () => {
 export const CreateRouteMain = () => {
   const [route, setRoute] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [mapCenter, setMapCenter] = useState([40.7128, -74.0060]); // Default to NYC
+  const [isSearching, setIsSearching] = useState(false);
+
+  // Function to search for locations using Nominatim API
+  const searchLocation = async (query) => {
+    if (!query.trim()) return;
+    
+    setIsSearching(true);
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`
+      );
+      const data = await response.json();
+      
+      if (data && data.length > 0) {
+        const lat = parseFloat(data[0].lat);
+        const lon = parseFloat(data[0].lon);
+        setMapCenter([lat, lon]);
+      } else {
+        alert('Location not found. Please try a different search term.');
+      }
+    } catch (error) {
+      console.error('Search error:', error);
+      alert('Search failed. Please try again.');
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const handleSearchSubmit = (e) => {
+    e.preventDefault();
+    searchLocation(searchQuery);
+  };
+
+  const handleSearchKeyPress = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      searchLocation(searchQuery);
+    }
+  };
 
   return (
     <div className="flex flex-col h-screen">
@@ -500,27 +540,56 @@ export const CreateRouteMain = () => {
         <div className="flex-1 relative">
           <div className="absolute top-4 left-4 right-4 z-[1000]">
             <h1 className="text-2xl font-bold text-gray-900 mb-4">Create Your Custom Route</h1>
-            <div className="flex space-x-2">
+            <form onSubmit={handleSearchSubmit} className="flex space-x-2">
               <div className="flex-1 relative">
                 <input
                   type="text"
                   placeholder="Search for a location..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyPress={handleSearchKeyPress}
                   className="w-full pl-10 pr-4 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent shadow-sm"
+                  disabled={isSearching}
                 />
                 <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
+                {isSearching && (
+                  <div className="absolute right-3 top-2.5">
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-orange-500"></div>
+                  </div>
+                )}
               </div>
-              <button className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg flex items-center space-x-1 shadow-sm transition-colors">
+              <button 
+                type="submit"
+                disabled={isSearching || !searchQuery.trim()}
+                className="bg-orange-500 hover:bg-orange-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg flex items-center space-x-1 shadow-sm transition-colors"
+              >
                 <Search className="w-4 h-4" />
               </button>
-              <button className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg shadow-sm transition-colors">
+              <button 
+                type="button"
+                onClick={() => navigator.geolocation?.getCurrentPosition(
+                  (position) => {
+                    setMapCenter([position.coords.latitude, position.coords.longitude]);
+                  },
+                  (error) => {
+                    console.error('Geolocation error:', error);
+                    alert('Unable to get your location. Please search for a location instead.');
+                  }
+                )}
+                className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg shadow-sm transition-colors"
+                title="Use current location"
+              >
                 <MapPin className="w-4 h-4" />
               </button>
-            </div>
+            </form>
           </div>
           
-          <DrawableMap route={route} setRoute={setRoute} />
+          <DrawableMap 
+            route={route} 
+            setRoute={setRoute} 
+            mapCenter={mapCenter}
+            setMapCenter={setMapCenter}
+          />
           
           {/* Bottom overlay with drawing tools */}
           <div className="absolute bottom-4 left-4 bg-white rounded-lg shadow-lg p-4 z-[1000]">
@@ -543,6 +612,13 @@ export const CreateRouteMain = () => {
               <input type="checkbox" id="show-waypoints" className="rounded" />
               <label htmlFor="show-waypoints" className="text-sm text-gray-600">Show Waypoints</label>
             </div>
+            {route.length > 0 && (
+              <div className="mt-2 pt-2 border-t border-gray-200">
+                <div className="text-xs text-gray-500">
+                  Route points: {route.length} | Distance: {(route.length * 0.1).toFixed(2)}km
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
