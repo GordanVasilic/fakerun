@@ -228,13 +228,14 @@ const RunDetailsPanel = ({ route }) => {
     date: '2026-05-29',
     startTime: '8:00',
     description: '',
-    avgPace: '6:50',
+    avgPace: 6.50, // Changed to number for easier calculations
     paceVariability: 50,
     distance: 0,
-    duration: 0
+    duration: 0,
+    elevationGain: 0
   });
 
-  // Calculate distance from route
+  // Calculate distance and update stats from route
   useEffect(() => {
     if (route.length > 1) {
       let totalDistance = 0;
@@ -254,19 +255,47 @@ const RunDetailsPanel = ({ route }) => {
         const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
         totalDistance += R * c;
       }
+      
+      const distance = parseFloat(totalDistance.toFixed(2));
+      const duration = Math.round(distance * runDetails.avgPace); // Duration based on pace
+      const elevationGain = Math.round(distance * 5.5); // Estimated elevation gain
+      
       setRunDetails(prev => ({ 
         ...prev, 
-        distance: totalDistance.toFixed(2),
-        duration: Math.round(totalDistance * 6) // Assuming 6 min/km pace for running
+        distance,
+        duration,
+        elevationGain
       }));
     } else {
       setRunDetails(prev => ({ 
         ...prev, 
         distance: 0,
-        duration: 0
+        duration: 0,
+        elevationGain: 0
       }));
     }
-  }, [route]);
+  }, [route, runDetails.avgPace]); // Re-calculate when pace changes
+
+  // Handle pace input change
+  const handlePaceInputChange = (e) => {
+    const value = parseFloat(e.target.value);
+    if (!isNaN(value) && value > 0) {
+      setRunDetails(prev => ({...prev, avgPace: value}));
+    }
+  };
+
+  // Handle pace slider change
+  const handlePaceSliderChange = (e) => {
+    const value = parseFloat(e.target.value);
+    setRunDetails(prev => ({...prev, avgPace: value}));
+  };
+
+  // Format pace for display
+  const formatPace = (pace) => {
+    const minutes = Math.floor(pace);
+    const seconds = Math.round((pace - minutes) * 60);
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
 
   return (
     <div className="h-full bg-gray-50 p-6 overflow-y-auto">
