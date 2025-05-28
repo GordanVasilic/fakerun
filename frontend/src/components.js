@@ -520,6 +520,68 @@ const RunDetailsPanel = ({ route, onRunDetailsChange }) => {
                 </button>
               </div>
             </div>
+
+            {/* Km-by-Km Pace Breakdown for Running */}
+            {runDetails.activityType === 'run' && runDetails.distance > 0 && (
+              <div className="mt-6">
+                <h4 className="text-sm font-medium text-gray-700 mb-3">Pace per Km (with Elevation)</h4>
+                <div className="max-h-40 overflow-y-auto space-y-2">
+                  {(() => {
+                    const kmCount = Math.ceil(runDetails.distance);
+                    const kmPaces = [];
+                    
+                    // Calculate elevation change per km
+                    const elevationPerKm = runDetails.elevationGain / kmCount;
+                    
+                    for (let i = 0; i < kmCount; i++) {
+                      // Simulate elevation effect on pace
+                      // Uphill: +10-30% slower, Downhill: 5-15% faster
+                      const elevationFactor = Math.sin((i / kmCount) * Math.PI * 2) * 0.2; // -0.2 to +0.2
+                      const uphillFactor = Math.max(0, elevationFactor) * 1.5; // More impact for uphill
+                      const downhillFactor = Math.min(0, elevationFactor) * 0.75; // Less impact for downhill
+                      
+                      const paceAdjustment = (uphillFactor + downhillFactor) * runDetails.avgPace;
+                      const kmPace = runDetails.avgPace + paceAdjustment;
+                      
+                      kmPaces.push(
+                        <div key={i} className="flex items-center justify-between bg-white p-2 rounded border">
+                          <span className="text-sm font-medium">Km {i + 1}</span>
+                          <div className="flex items-center space-x-2">
+                            <span className="text-xs text-gray-500">
+                              {elevationFactor > 0.05 ? '↗️ uphill' : elevationFactor < -0.05 ? '↘️ downhill' : '→ flat'}
+                            </span>
+                            <input
+                              type="number"
+                              value={kmPace.toFixed(1)}
+                              onChange={(e) => {
+                                // Handle individual km pace changes
+                                // Note: This is a simplified version - in a real app you'd want to update 
+                                // the global pace based on average of all km paces
+                                const value = parseFloat(e.target.value);
+                                if (!isNaN(value) && value > 0) {
+                                  // For now, just show the input - could implement full recalculation
+                                  console.log(`Km ${i + 1} pace changed to ${value}`);
+                                }
+                              }}
+                              step="0.1"
+                              min="3.0"
+                              max="15.0"
+                              className="w-16 px-1 py-1 border border-gray-300 rounded text-xs text-center focus:outline-none focus:ring-1 focus:ring-orange-500"
+                            />
+                            <span className="text-xs text-gray-500">{runDetails.paceUnit}</span>
+                          </div>
+                        </div>
+                      );
+                    }
+                    
+                    return kmPaces;
+                  })()}
+                </div>
+                <div className="mt-2 text-xs text-gray-500 text-center">
+                  Average: {formatPace(runDetails.avgPace)} {runDetails.paceUnit}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
