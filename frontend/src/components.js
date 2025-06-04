@@ -5,6 +5,118 @@ import { Search, MapPin, Edit3, MoreHorizontal, Play, Trash2, Route, Clock, Moun
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 
+// Open-Elevation API functions
+const elevationCache = new Map();
+
+const sampleCoordinates = (route, maxPoints = 50) => {
+  if (route.length <= maxPoints) return route;
+  
+  const step = Math.floor(route.length / maxPoints);
+  const sampled = [];
+  
+  for (let i = 0; i < route.length; i += step) {
+    sampled.push(route[i]);
+  }
+  
+  // Always include the last point
+  if (sampled[sampled.length - 1] !== route[route.length - 1]) {
+    sampled.push(route[route.length - 1]);
+  }
+  
+  return sampled;
+};
+
+const getOpenElevation = async (coordinates) => {
+  const cacheKey = coordinates.map(c => `${c.lat.toFixed(4)},${c.lng.toFixed(4)}`).join('|');
+  
+  if (elevationCache.has(cacheKey)) {
+    return elevationCache.get(cacheKey);
+  }
+  
+  try {
+    const locations = coordinates.map(coord => `${coord.lat},${coord.lng}`).join('|');
+    const response = await fetch(
+      `https://api.open-elevation.com/api/v1/lookup?locations=${locations}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          locations: coordinates.map(coord => ({ latitude: coord.lat, longitude: coord.lng }))
+        })
+      }
+    );
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    const elevationData = data.results.map(result => result.elevation);
+    
+    elevationCache.set(cacheKey, elevationData);
+    return elevationData;
+  } catch (error) {
+    console.error('Open-Elevation API error:', error);
+    throw error;
+  }
+};
+
+const calculateElevationGain = (elevationData) => {
+  let totalGain = 0;
+  for (let i = 1; i < elevationData.length; i++) {
+    const diff = elevationData[i] - elevationData[i - 1];
+    if (diff > 0) {
+      totalGain += diff;
+    }
+  }
+  return Math.round(totalGain);
+};
+
+const interpolateElevation = (elevationData, targetLength) => {
+  if (elevationData.length === targetLength) return elevationData;
+  
+  const interpolated = [];
+  const ratio = (elevationData.length - 1) / (targetLength - 1);
+  
+  for (let i = 0; i < targetLength; i++) {
+    const index = i * ratio;
+    const lowerIndex = Math.floor(index);
+    const upperIndex = Math.ceil(index);
+    
+    if (lowerIndex === upperIndex) {
+      interpolated.push(elevationData[lowerIndex]);
+    } else {
+      const weight = index - lowerIndex;
+      const interpolatedValue = elevationData[lowerIndex] * (1 - weight) + elevationData[upperIndex] * weight;
+      interpolated.push(interpolatedValue);
+    }
+  }
+  
+  return interpolated;
+};
+
+const getKmElevationChanges = (elevationProfile, distance) => {
+  const kmCount = Math.ceil(distance);
+  const pointsPerKm = elevationProfile.length / distance;
+  const kmElevationChanges = [];
+  
+  for (let i = 0; i < kmCount; i++) {
+    const startIdx = Math.floor(i * pointsPerKm);
+    const endIdx = Math.floor((i + 1) * pointsPerKm);
+    
+    if (startIdx < elevationProfile.length && endIdx < elevationProfile.length) {
+      const elevationChange = elevationProfile[endIdx] - elevationProfile[startIdx];
+      kmElevationChanges.push(Math.round(elevationChange));
+    } else {
+      kmElevationChanges.push(0);
+    }
+  }
+  
+  return kmElevationChanges;
+};
+
 // Fix for default markers in react-leaflet
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -218,16 +330,30 @@ const RunDetailsPanel = ({ route, onRunDetailsChange }) => {
     date: '2026-05-29',
     startTime: '8:00',
     description: '',
-    avgPace: 6.50, // Changed to number for easier calculations
+    avgPace: 6.0, // Changed from 6.50 to 6.0 for 6:00 pace
     distance: 0,
     duration: 0,
     elevationGain: 0,
+    elevationProfile: [], // Add elevation profile array
     activityType: 'run', // 'run' or 'bike'
     paceUnit: 'min/km' // 'min/km' or 'min/mi'
   });
   
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState('');
+  const [kmPaces, setKmPaces] = useState({});
+
+ // Helper functions for time format conversion
+  const decimalToTimeFormat = (decimal) => {
+    const minutes = Math.floor(decimal);
+    const seconds = Math.round((decimal - minutes) * 60);
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  const timeFormatToDecimal = (timeStr) => {
+    const [minutes, seconds] = timeStr.split(':').map(Number);
+    return minutes + (seconds / 60);
+  };
 
   // Notify parent component when runDetails change
   useEffect(() => {
@@ -307,46 +433,68 @@ const RunDetailsPanel = ({ route, onRunDetailsChange }) => {
     }
   };
 
-  // Calculate distance and update stats from route
+  // Calculate route details with real elevation data
   useEffect(() => {
-    if (route.length > 1) {
+    if (route && route.length > 1) {
       let totalDistance = 0;
+      
       for (let i = 1; i < route.length; i++) {
-        const lat1 = route[i-1][0];
-        const lon1 = route[i-1][1];
-        const lat2 = route[i][0];
-        const lon2 = route[i][1];
-        
-        // Haversine formula for distance calculation
         const R = 6371; // Earth's radius in km
-        const dLat = (lat2 - lat1) * Math.PI / 180;
-        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const dLat = (route[i][0] - route[i-1][0]) * Math.PI / 180;
+        const dLon = (route[i][1] - route[i-1][1]) * Math.PI / 180;
         const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-                Math.sin(dLon/2) * Math.sin(dLon/2);
+                  Math.cos(route[i-1][0] * Math.PI / 180) * Math.cos(route[i][0] * Math.PI / 180) *
+                  Math.sin(dLon/2) * Math.sin(dLon/2);
         const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
         totalDistance += R * c;
       }
       
       const distance = parseFloat(totalDistance.toFixed(2));
-      const duration = Math.round(distance * runDetails.avgPace); // Duration based on pace
-      const elevationGain = Math.round(distance * 5.5); // Estimated elevation gain
+      const duration = Math.round(distance * runDetails.avgPace);
       
-      setRunDetails(prev => ({ 
-        ...prev, 
-        distance,
-        duration,
-        elevationGain
-      }));
+      // Get real elevation data
+      const getRouteElevation = async () => {
+        try {
+          // Sample coordinates to reduce API calls
+          const sampledRoute = sampleCoordinates(route.map(point => ({lat: point[0], lng: point[1]})), 50);
+          const elevationData = await getOpenElevation(sampledRoute);
+          
+          // Interpolate to match route length for smooth visualization
+          const fullElevationProfile = interpolateElevation(elevationData, route.length);
+          const elevationGain = calculateElevationGain(elevationData);
+          
+          setRunDetails(prev => ({ 
+            ...prev, 
+            distance,
+            duration,
+            elevationGain,
+            elevationProfile: fullElevationProfile
+          }));
+        } catch (error) {
+          console.error('Failed to get elevation data:', error);
+          // Fallback to current simulation
+          const elevationGain = Math.round(distance * 5.5);
+          setRunDetails(prev => ({ 
+            ...prev, 
+            distance,
+            duration,
+            elevationGain,
+            elevationProfile: []
+          }));
+        }
+      };
+      
+      getRouteElevation();
     } else {
       setRunDetails(prev => ({ 
         ...prev, 
         distance: 0,
         duration: 0,
-        elevationGain: 0
+        elevationGain: 0,
+        elevationProfile: []
       }));
     }
-  }, [route, runDetails.avgPace]); // Re-calculate when pace changes
+  }, [route, runDetails.avgPace]);
 
   // Handle pace input change
   const handlePaceInputChange = (e) => {
@@ -360,6 +508,28 @@ const RunDetailsPanel = ({ route, onRunDetailsChange }) => {
   const handlePaceSliderChange = (e) => {
     const value = parseFloat(e.target.value);
     setRunDetails(prev => ({...prev, avgPace: value}));
+  };
+
+  const handlePaceUnitChange = (newUnit) => {
+    setRunDetails(prev => {
+      let newAvgPace = prev.avgPace;
+      
+      // Convert pace when switching units
+      if (prev.paceUnit === 'min/km' && newUnit === 'min/mi') {
+        newAvgPace = prev.avgPace * 1.60934; // km pace to mile pace
+      } else if (prev.paceUnit === 'min/mi' && newUnit === 'min/km') {
+        newAvgPace = prev.avgPace / 1.60934; // mile pace to km pace
+      }
+      
+      return {
+        ...prev,
+        paceUnit: newUnit,
+        avgPace: newAvgPace
+      };
+    });
+    
+    // Clear km paces when switching units
+    setKmPaces({});
   };
 
   // Format pace for display
@@ -389,7 +559,7 @@ const RunDetailsPanel = ({ route, onRunDetailsChange }) => {
               <div className="text-xs text-gray-600 mb-1 text-center">Pace unit</div>
               <div className="flex bg-gray-200 rounded-lg p-1">
                 <button
-                  onClick={() => setRunDetails(prev => ({...prev, paceUnit: 'min/km'}))}
+                  onClick={() => handlePaceUnitChange('min/km')}
                   className={`px-3 py-1 text-sm rounded-md transition-colors ${
                     runDetails.paceUnit === 'min/km'
                       ? 'bg-orange-500 text-white'
@@ -399,7 +569,7 @@ const RunDetailsPanel = ({ route, onRunDetailsChange }) => {
                   min/km
                 </button>
                 <button
-                  onClick={() => setRunDetails(prev => ({...prev, paceUnit: 'min/mi'}))}
+                  onClick={() => handlePaceUnitChange('min/mi')}
                   className={`px-3 py-1 text-sm rounded-md transition-colors ${
                     runDetails.paceUnit === 'min/mi'
                       ? 'bg-orange-500 text-white'
@@ -508,23 +678,42 @@ const RunDetailsPanel = ({ route, onRunDetailsChange }) => {
             {/* Km-by-Km Pace Breakdown for Running */}
             {runDetails.activityType === 'run' && runDetails.distance > 0 && (
               <div className="mt-6">
-                <h4 className="text-sm font-medium text-gray-700 mb-3">Pace per Km (with Elevation)</h4>
+                <h4 className="text-sm font-medium text-gray-700 mb-3">
+                  Pace per {runDetails.paceUnit === 'min/mi' ? 'Mile' : 'Km'} (with Elevation)
+                </h4>
                 <div className="max-h-40 overflow-y-auto space-y-2">
                   {(() => {
                     const kmCount = Math.ceil(runDetails.distance);
                     const kmPaces = [];
                     
-                    // Calculate elevation change per km
-                    const elevationPerKm = runDetails.elevationGain / kmCount;
+                    // Use real elevation data if available, otherwise fall back to simulation
+                    let kmElevationChanges = [];
+                    if (runDetails.elevationProfile && runDetails.elevationProfile.length > 0) {
+                      kmElevationChanges = getKmElevationChanges(runDetails.elevationProfile, runDetails.distance);
+                    } else {
+                      // Fallback to simulation
+                      const elevationPerKm = runDetails.elevationGain / kmCount;
+                      for (let i = 0; i < kmCount; i++) {
+                        const elevationFactor = Math.sin((i / kmCount) * Math.PI * 2) * 0.2;
+                        kmElevationChanges.push(Math.round(elevationFactor * elevationPerKm));
+                      }
+                    }
                     
                     for (let i = 0; i < kmCount; i++) {
-                      // Simulate elevation effect on pace
-                      // Uphill: +10-30% slower, Downhill: 5-15% faster
-                      const elevationFactor = Math.sin((i / kmCount) * Math.PI * 2) * 0.2; // -0.2 to +0.2
-                      const uphillFactor = Math.max(0, elevationFactor) * 1.5; // More impact for uphill
-                      const downhillFactor = Math.min(0, elevationFactor) * 0.75; // Less impact for downhill
+                      const kmElevationChange = kmElevationChanges[i] || 0;
                       
-                      const paceAdjustment = (uphillFactor + downhillFactor) * runDetails.avgPace;
+                      // Calculate pace adjustment based on elevation change
+                      let paceAdjustment = 0;
+                      if (kmElevationChange > 5) {
+                        // Uphill: slower pace (10-30% increase)
+                        const uphillFactor = Math.min(kmElevationChange / 50, 0.3); // Max 30% slower
+                        paceAdjustment = uphillFactor * runDetails.avgPace;
+                      } else if (kmElevationChange < -5) {
+                        // Downhill: faster pace (5-15% decrease)
+                        const downhillFactor = Math.min(Math.abs(kmElevationChange) / 100, 0.15); // Max 15% faster
+                        paceAdjustment = -downhillFactor * runDetails.avgPace;
+                      }
+                      
                       const kmPace = runDetails.avgPace + paceAdjustment;
                       
                       kmPaces.push(
@@ -532,34 +721,45 @@ const RunDetailsPanel = ({ route, onRunDetailsChange }) => {
                           <span className="text-sm font-medium">Km {i + 1}</span>
                           <div className="flex items-center space-x-2">
                             <span className="text-xs text-gray-500">
-                              {elevationFactor > 0.05 ? '↗️ uphill' : elevationFactor < -0.05 ? '↘️ downhill' : '→ flat'}
+                              {kmElevationChange > 5 
+                                ? `↗️ uphill (+${kmElevationChange}m)` 
+                                : kmElevationChange < -5 
+                                ? `↘️ downhill (${kmElevationChange}m)` 
+                                : '→ flat (0m)'}
                             </span>
                             <input
-                              type="number"
-                              value={kmPace.toFixed(1)}
+                              type="text"
+                              className="w-16 px-2 py-1 text-sm border rounded text-center"
+                              value={kmPaces[i] ? decimalToTimeFormat(kmPaces[i]) : decimalToTimeFormat(kmPace)}
                               onChange={(e) => {
-                                // Handle individual km pace changes
-                                // Note: This is a simplified version - in a real app you'd want to update 
-                                // the global pace based on average of all km paces
-                                const value = parseFloat(e.target.value);
-                                if (!isNaN(value) && value > 0) {
-                                  // For now, just show the input - could implement full recalculation
-                                  console.log(`Km ${i + 1} pace changed to ${value}`);
+                                const value = e.target.value;
+                                if (/^\d{1,2}:\d{2}$/.test(value)) {
+                                  const decimal = timeFormatToDecimal(value);
+                                  if (decimal > 0) {
+                                    setKmPaces(prev => ({...prev, [i]: decimal}));
+                                  }
                                 }
                               }}
-                              step="0.1"
-                              min="3.0"
-                              max="15.0"
-                              className="w-16 px-1 py-1 border border-gray-300 rounded text-xs text-center focus:outline-none focus:ring-1 focus:ring-orange-500"
+                              onBlur={(e) => {
+                                const value = e.target.value;
+                                if (!/^\d{1,2}:\d{2}$/.test(value) || timeFormatToDecimal(value) <= 0) {
+                                  setKmPaces(prev => {
+                                    const updated = {...prev};
+                                    delete updated[i];
+                                    return updated;
+                                  });
+                                }
+                              }}
+                              placeholder={decimalToTimeFormat(kmPace)}
                             />
-                            <span className="text-xs text-gray-500">{runDetails.paceUnit}</span>
+                            <span className="text-xs text-gray-400">{runDetails.paceUnit}</span>
                           </div>
                         </div>
                       );
                     }
                     
                     return kmPaces;
-                  })()}
+                  })()} 
                 </div>
                 <div className="mt-2 text-xs text-gray-500 text-center">
                   Average: {formatPace(runDetails.avgPace)} {runDetails.paceUnit}
@@ -720,9 +920,9 @@ const DataVisualization = ({ route, runDetails }) => {
       };
     }
 
-    const numPoints = Math.min(route.length, 20);
+    const numPoints = Math.min(route.length, 50); // Increase points for smoother graph
     const labels = [];
-    const elevationData = [];
+    let elevationData = [];
     
     const totalDistance = details.distance;
     let currentElevation = 100; // Starting elevation
@@ -730,20 +930,41 @@ const DataVisualization = ({ route, runDetails }) => {
     for (let i = 0; i < numPoints; i++) {
       const distanceAlongRoute = (totalDistance * i) / (numPoints - 1);
       labels.push(distanceAlongRoute.toFixed(1));
+    }
+    
+    // Use real elevation data if available
+    if (runDetails && runDetails.elevationProfile && runDetails.elevationProfile.length > 0) {
+      // Sample the elevation data to match the number of chart points
+      const elevationProfile = runDetails.elevationProfile;
       
-      if (i === 0) {
-        elevationData.push(currentElevation);
+      if (elevationProfile.length === numPoints) {
+        elevationData = elevationProfile;
       } else {
-        // Simulate elevation changes based on total elevation gain
+        // Interpolate elevation data to match chart points
+        for (let i = 0; i < numPoints; i++) {
+          const ratio = (elevationProfile.length - 1) * i / (numPoints - 1);
+          const lowerIndex = Math.floor(ratio);
+          const upperIndex = Math.ceil(ratio);
+          
+          if (lowerIndex === upperIndex) {
+            elevationData.push(elevationProfile[lowerIndex]);
+          } else {
+            const weight = ratio - lowerIndex;
+            const interpolatedValue = elevationProfile[lowerIndex] * (1 - weight) + 
+                                     elevationProfile[upperIndex] * weight;
+            elevationData.push(interpolatedValue);
+          }
+        }
+      }
+    } else {
+      // Fallback to simulation
+      for (let i = 0; i < numPoints; i++) {
         const progressRatio = i / (numPoints - 1);
         const baseElevationGain = details.elevationGain * progressRatio;
-        
-        // Add some realistic variation
-        const hillVariation = Math.sin(i * 0.8) * 15; // Hills and valleys
-        const noise = (Math.random() - 0.5) * 10; // Small variations
-        
+        const hillVariation = Math.sin(i * 0.8) * 15;
+        const noise = (Math.random() - 0.5) * 10;
         currentElevation = 100 + baseElevationGain + hillVariation + noise;
-        elevationData.push(Math.max(50, currentElevation)); // Minimum 50m elevation
+        elevationData.push(Math.max(50, currentElevation));
       }
     }
     
@@ -789,6 +1010,47 @@ const DataVisualization = ({ route, runDetails }) => {
     },
   };
 
+  const elevationChartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    scales: {
+      x: {
+        grid: {
+          display: false,
+        },
+        title: {
+          display: true,
+          text: 'Distance (km)'
+        }
+      },
+      y: {
+        grid: {
+          color: '#e5e7eb',
+        },
+        title: {
+          display: true,
+          text: 'Elevation (m)'
+        },
+        // Auto-scale based on data range
+        beginAtZero: false,
+      },
+    },
+    plugins: {
+      legend: {
+        display: false,
+      },
+      tooltip: {
+        mode: 'index',
+        intersect: false,
+        callbacks: {
+          label: function(context) {
+            return `Elevation: ${Math.round(context.parsed.y)}m`;
+          }
+        }
+      },
+    },
+  };
+
   return (
     <div className="bg-white px-6 py-8">
       <div className="max-w-7xl mx-auto">
@@ -799,7 +1061,7 @@ const DataVisualization = ({ route, runDetails }) => {
           <div className="bg-gray-50 rounded-lg p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-medium text-gray-900">Pace Profile</h3>
-              <span className="text-sm text-gray-500">Average: 6.15 min/km over total</span>
+              <span className="text-sm text-gray-500">Average: {Math.floor(details.avgPace)}:{Math.round((details.avgPace % 1) * 60).toString().padStart(2, '0')} min/km over total</span>
             </div>
             <div className="h-64">
               <Line data={paceData} options={chartOptions} />
@@ -811,10 +1073,10 @@ const DataVisualization = ({ route, runDetails }) => {
           <div className="bg-gray-50 rounded-lg p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-medium text-gray-900">Elevation Profile</h3>
-              <span className="text-sm text-gray-500">Total Gain: 56m</span>
+              <span className="text-sm text-gray-500">Total Gain: {details.elevationGain}m</span>
             </div>
             <div className="h-64">
-              <Line data={elevationData} options={chartOptions} />
+              <Line data={elevationData} options={elevationChartOptions} />
             </div>
             <div className="mt-2 text-xs text-gray-500 text-center">Distance (km)</div>
           </div>
@@ -823,19 +1085,19 @@ const DataVisualization = ({ route, runDetails }) => {
         {/* Additional Stats */}
         <div className="mt-8 grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
           <div className="bg-gray-50 rounded-lg p-4">
-            <div className="text-2xl font-bold text-gray-900">10.2</div>
+            <div className="text-2xl font-bold text-gray-900">{details.distance.toFixed(1)}</div>
             <div className="text-sm text-gray-500">Total Distance</div>
           </div>
           <div className="bg-gray-50 rounded-lg p-4">
-            <div className="text-2xl font-bold text-gray-900">62:48</div>
+            <div className="text-2xl font-bold text-gray-900">{Math.floor(details.duration / 60)}:{(details.duration % 60).toString().padStart(2, '0')}</div>
             <div className="text-sm text-gray-500">Total Time</div>
           </div>
           <div className="bg-gray-50 rounded-lg p-4">
-            <div className="text-2xl font-bold text-gray-900">6:15</div>
+            <div className="text-2xl font-bold text-gray-900">{Math.floor(details.avgPace)}:{Math.round((details.avgPace % 1) * 60).toString().padStart(2, '0')}</div>
             <div className="text-sm text-gray-500">Avg Pace</div>
           </div>
           <div className="bg-gray-50 rounded-lg p-4">
-            <div className="text-2xl font-bold text-gray-900">56m</div>
+            <div className="text-2xl font-bold text-gray-900">{details.elevationGain}m</div>
             <div className="text-sm text-gray-500">Elevation Gain</div>
           </div>
         </div>
@@ -918,8 +1180,8 @@ export const CreateRouteMain = () => {
         {/* Left Panel - Map */}
         <div className="flex-1">
           <div className="bg-white rounded-lg shadow-lg h-[80vh] overflow-hidden relative">
-            <div className="absolute top-4 left-4 right-4 z-[1000]">
-              <div className="bg-white bg-opacity-90 rounded-lg shadow-lg px-4 py-3 mb-4">
+            <div className="absolute top-4 left-4 z-[1000]">
+              <div className="bg-white bg-opacity-90 rounded-lg shadow-lg px-4 py-3 mb-4 w-fit">
                 <h1 className="text-2xl font-bold text-gray-900">Create Your Custom Route</h1>
               </div>
               <form onSubmit={handleSearchSubmit} className="flex space-x-2">
