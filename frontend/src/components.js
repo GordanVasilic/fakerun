@@ -1,121 +1,30 @@
+import DrawableMap from './components/Map/DrawableMap';
+import RunDetailsPanel from './components/Panels/RunDetailsPanel';
 import React, { useState, useRef, useEffect } from 'react';
 import { MapContainer, TileLayer, Polyline, Marker, useMapEvents, useMap } from 'react-leaflet';
 import { Line } from 'react-chartjs-2';
-import { Search, MapPin, Edit3, MoreHorizontal, Play, Trash2, Route, Clock, Mountain, Gauge, Minus, RotateCcw } from 'lucide-react';
+import { Search, MapPin, Edit3, MoreHorizontal, Play, Trash2, Route, Clock, Mountain, Gauge, Minus, RotateCcw, Save, List, Filter, User, LogOut, LogIn, UserPlus } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
+import { 
+  elevationCache, 
+  sampleCoordinates, 
+  getOpenElevation, 
+  calculateElevationGain, 
+  interpolateElevation, 
+  getKmElevationChanges 
+} from './utils/elevation';
+import { authService } from './services/auth';
+import MapTypeSelector from './components/Map/MapTypeSelector';
+import { startIcon, endIcon, waypointIcon } from './components/Map/mapIcons';
+import RouteThumbnail from './components/UI/RouteThumbnail';
+import NotificationModal from './components/Modals/NotificationModal';
+import DeleteConfirmModal from './components/Modals/DeleteConfirmModal';
+import DataVisualization from './components/Charts/DataVisualization';
+import SavedRoutesPage from './components/Pages/SavedRoutesPage';
+import HowItWorksPage from './components/Pages/HowItWorksPage';
 
-// Open-Elevation API functions
-const elevationCache = new Map();
-
-const sampleCoordinates = (route, maxPoints = 50) => {
-  if (route.length <= maxPoints) return route;
-  
-  const step = Math.floor(route.length / maxPoints);
-  const sampled = [];
-  
-  for (let i = 0; i < route.length; i += step) {
-    sampled.push(route[i]);
-  }
-  
-  // Always include the last point
-  if (sampled[sampled.length - 1] !== route[route.length - 1]) {
-    sampled.push(route[route.length - 1]);
-  }
-  
-  return sampled;
-};
-
-const getOpenElevation = async (coordinates) => {
-  const cacheKey = coordinates.map(c => `${c.lat.toFixed(4)},${c.lng.toFixed(4)}`).join('|');
-  
-  if (elevationCache.has(cacheKey)) {
-    return elevationCache.get(cacheKey);
-  }
-  
-  try {
-    const locations = coordinates.map(coord => `${coord.lat},${coord.lng}`).join('|');
-    const response = await fetch(
-      `https://api.open-elevation.com/api/v1/lookup?locations=${locations}`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          locations: coordinates.map(coord => ({ latitude: coord.lat, longitude: coord.lng }))
-        })
-      }
-    );
-    
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    const elevationData = data.results.map(result => result.elevation);
-    
-    elevationCache.set(cacheKey, elevationData);
-    return elevationData;
-  } catch (error) {
-    console.error('Open-Elevation API error:', error);
-    throw error;
-  }
-};
-
-const calculateElevationGain = (elevationData) => {
-  let totalGain = 0;
-  for (let i = 1; i < elevationData.length; i++) {
-    const diff = elevationData[i] - elevationData[i - 1];
-    if (diff > 0) {
-      totalGain += diff;
-    }
-  }
-  return Math.round(totalGain);
-};
-
-const interpolateElevation = (elevationData, targetLength) => {
-  if (elevationData.length === targetLength) return elevationData;
-  
-  const interpolated = [];
-  const ratio = (elevationData.length - 1) / (targetLength - 1);
-  
-  for (let i = 0; i < targetLength; i++) {
-    const index = i * ratio;
-    const lowerIndex = Math.floor(index);
-    const upperIndex = Math.ceil(index);
-    
-    if (lowerIndex === upperIndex) {
-      interpolated.push(elevationData[lowerIndex]);
-    } else {
-      const weight = index - lowerIndex;
-      const interpolatedValue = elevationData[lowerIndex] * (1 - weight) + elevationData[upperIndex] * weight;
-      interpolated.push(interpolatedValue);
-    }
-  }
-  
-  return interpolated;
-};
-
-const getKmElevationChanges = (elevationProfile, distance) => {
-  const kmCount = Math.ceil(distance);
-  const pointsPerKm = elevationProfile.length / distance;
-  const kmElevationChanges = [];
-  
-  for (let i = 0; i < kmCount; i++) {
-    const startIdx = Math.floor(i * pointsPerKm);
-    const endIdx = Math.floor((i + 1) * pointsPerKm);
-    
-    if (startIdx < elevationProfile.length && endIdx < elevationProfile.length) {
-      const elevationChange = elevationProfile[endIdx] - elevationProfile[startIdx];
-      kmElevationChanges.push(Math.round(elevationChange));
-    } else {
-      kmElevationChanges.push(0);
-    }
-  }
-  
-  return kmElevationChanges;
-};
+// Elevation functions are now imported from utils/elevation
 
 // Fix for default markers in react-leaflet
 delete L.Icon.Default.prototype._getIconUrl;
@@ -124,6 +33,8 @@ L.Icon.Default.mergeOptions({
   iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
+
+// Map icons are now imported from components/Map/mapIcons
 
 // Import Chart.js components
 import {
@@ -135,6 +46,7 @@ import {
   Title,
   Tooltip,
   Legend,
+  Filler
 } from 'chart.js';
 
 ChartJS.register(
@@ -144,698 +56,99 @@ ChartJS.register(
   LineElement,
   Title,
   Tooltip,
-  Legend
+  Legend,
+  Filler
 );
 
-export const Header = () => {
-  return (
-    <header className="bg-white border-b border-gray-200 px-6 py-4">
-      <div className="max-w-7xl mx-auto flex items-center justify-between">
-        <div className="flex items-center space-x-8">
-          <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-orange-500 rounded flex items-center justify-center">
-              <Play className="w-5 h-5 text-white" />
-            </div>
-            <span className="text-xl font-bold text-gray-900">Fake My Run</span>
-          </div>
-          <nav className="hidden md:flex space-x-6">
-            <a href="#" className="text-gray-600 hover:text-gray-900 transition-colors">How It Works</a>
-            <a href="#" className="text-gray-600 hover:text-gray-900 transition-colors">How To Upload</a>
-          </nav>
-        </div>
-        <div className="flex items-center space-x-4">
-          <span className="text-gray-600">0</span>
-          <button className="text-gray-600 hover:text-gray-900">Log Email</button>
-          <button className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-md transition-colors">
-            Get Started
-          </button>
-        </div>
-      </div>
-    </header>
-  );
-};
+// AuthService is now imported from services/auth
 
-const DrawableMap = ({ route, setRoute, mapCenter, setMapCenter }) => {
-  const [routeCoordinates, setRouteCoordinates] = useState([]);
-  
-  // Component to handle search and map centering
-  const MapController = ({ center }) => {
-    const map = useMap();
-    
-    useEffect(() => {
-      if (center) {
-        map.setView(center, 15);
-      }
-    }, [center, map]);
-    
-    return null;
-  };
-
-  // Component to handle map clicks and route building - always active
-  const MapEvents = () => {
-    useMapEvents({
-      async click(e) {
-        const newPoint = [e.latlng.lat, e.latlng.lng];
-        
-        if (routeCoordinates.length === 0) {
-          // First point
-          setRouteCoordinates([newPoint]);
-          setRoute([newPoint]);
-        } else {
-          // Get route from last point to new point using routing service
-          const lastPoint = routeCoordinates[routeCoordinates.length - 1];
-          try {
-            const routeSegment = await getRoute(lastPoint, newPoint);
-            if (routeSegment && routeSegment.length > 0) {
-              const newRouteCoords = [...routeCoordinates, ...routeSegment.slice(1)];
-              setRouteCoordinates(newRouteCoords);
-              setRoute(newRouteCoords);
-            } else {
-              // Fallback to direct line if routing fails
-              const newRouteCoords = [...routeCoordinates, newPoint];
-              setRouteCoordinates(newRouteCoords);
-              setRoute(newRouteCoords);
-            }
-          } catch (error) {
-            console.log('Routing failed, using direct line:', error);
-            const newRouteCoords = [...routeCoordinates, newPoint];
-            setRouteCoordinates(newRouteCoords);
-            setRoute(newRouteCoords);
-          }
-        }
-      },
-    });
-    return null;
-  };
-
-  // Function to get route between two points using OSRM (free routing service)
-  const getRoute = async (start, end) => {
-    try {
-      // Using OSRM demo server (free, no API key needed)
-      const response = await fetch(
-        `https://router.project-osrm.org/route/v1/foot/${start[1]},${start[0]};${end[1]},${end[0]}?overview=full&geometries=geojson`
-      );
-      const data = await response.json();
-      
-      if (data.routes && data.routes[0] && data.routes[0].geometry) {
-        const coordinates = data.routes[0].geometry.coordinates;
-        return coordinates.map(coord => [coord[1], coord[0]]); // Convert [lng,lat] to [lat,lng]
-      }
-      return null;
-    } catch (error) {
-      console.log('OSRM routing failed:', error);
-      return null;
-    }
-  };
-
-  const clearRoute = () => {
-    setRoute([]);
-    setRouteCoordinates([]);
-  };
-
-  const removeLastPoint = () => {
-    if (routeCoordinates.length > 0) {
-      const newCoords = routeCoordinates.slice(0, -1);
-      setRouteCoordinates(newCoords);
-      setRoute(newCoords);
-    }
-  };
-
-  return (
-    <div className="relative h-full">
-      <MapContainer 
-        center={mapCenter} 
-        zoom={13} 
-        className="h-full w-full cursor-crosshair"
-        zoomControl={false}
-      >
-        <TileLayer
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        />
-        <MapController center={mapCenter} />
-        <MapEvents />
-        
-        {route.length > 1 && (
-          <Polyline 
-            positions={route} 
-            color="#F97316" 
-            weight={4}
-            opacity={0.8}
-          />
-        )}
-        
-        {routeCoordinates.length > 0 && (
-          <>
-            <Marker position={routeCoordinates[0]} />
-            {routeCoordinates.length > 1 && (
-              <Marker position={routeCoordinates[routeCoordinates.length - 1]} />
-            )}
-          </>
-        )}
-      </MapContainer>
-      
-      {/* Route Controls - styled like orange buttons */}
-      <div className="absolute bottom-4 left-4 z-[1000] flex space-x-2">
-        <button 
-          onClick={removeLastPoint}
-          disabled={routeCoordinates.length === 0}
-          className="bg-orange-500 hover:bg-orange-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white px-3 py-2 rounded-lg shadow-lg text-sm font-medium transition-colors"
-        >
-          Remove last point
-        </button>
-        <button 
-          onClick={clearRoute}
-          disabled={routeCoordinates.length === 0}
-          className="bg-red-500 hover:bg-red-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white px-3 py-2 rounded-lg shadow-lg text-sm font-medium transition-colors"
-        >
-          Clear route
-        </button>
-      </div>
-
-      {/* Zoom Controls - moved to bottom right */}
-      <div className="absolute bottom-4 right-4 bg-white rounded-lg shadow-lg p-1 z-[1000]">
-        <div className="flex flex-col">
-          <button className="p-2 hover:bg-gray-100 text-lg font-bold transition-colors">+</button>
-          <button className="p-2 hover:bg-gray-100 text-lg font-bold transition-colors">−</button>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const RunDetailsPanel = ({ route, onRunDetailsChange }) => {
-  const [runDetails, setRunDetails] = useState({
-    name: 'Morning Run',
-    date: '2026-05-29',
-    startTime: '8:00',
-    description: '',
-    avgPace: 6.0, // Changed from 6.50 to 6.0 for 6:00 pace
-    distance: 0,
-    duration: 0,
-    elevationGain: 0,
-    elevationProfile: [], // Add elevation profile array
-    activityType: 'run', // 'run' or 'bike'
-    paceUnit: 'min/km' // 'min/km' or 'min/mi'
-  });
-  
-  const [isGenerating, setIsGenerating] = useState(false);
+// Login Modal Component
+export const LoginModal = ({ isOpen, onClose, onSwitchToRegister }) => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [kmPaces, setKmPaces] = useState({});
 
- // Helper functions for time format conversion
-  const decimalToTimeFormat = (decimal) => {
-    const minutes = Math.floor(decimal);
-    const seconds = Math.round((decimal - minutes) * 60);
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-  };
-
-  const timeFormatToDecimal = (timeStr) => {
-    const [minutes, seconds] = timeStr.split(':').map(Number);
-    return minutes + (seconds / 60);
-  };
-
-  // Notify parent component when runDetails change
-  useEffect(() => {
-    if (onRunDetailsChange) {
-      onRunDetailsChange(runDetails);
-    }
-  }, [runDetails, onRunDetailsChange]);
-
-  // Format duration in h:mm:ss format
-  const formatDuration = (seconds) => {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
-    
-    if (hours > 0) {
-      return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-    } else {
-      return `${minutes}:${secs.toString().padStart(2, '0')}`;
-    }
-  };
-
-  // Handle creating fake run and downloading GPX
-  const handleCreateRun = async () => {
-    if (route.length < 2) {
-      setError('Please create a route with at least 2 points on the map');
-      return;
-    }
-
-    setIsGenerating(true);
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
     setError('');
 
     try {
-      const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8001';
-      
-      const response = await fetch(`${backendUrl}/api/generate-gpx`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          route: route,
-          runDetails: runDetails
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to generate GPX file');
-      }
-
-      // Get filename from response headers
-      const contentDisposition = response.headers.get('Content-Disposition');
-      let filename = 'fake_run.gpx';
-      if (contentDisposition) {
-        const matches = contentDisposition.match(/filename="?([^"]+)"?/);
-        if (matches) {
-          filename = matches[1];
-        }
-      }
-
-      // Create blob and download
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-
-    } catch (error) {
-      console.error('Error generating GPX:', error);
-      setError(`Error: ${error.message}`);
+      await authService.login(email, password);
+      onClose();
+      window.location.reload(); // Refresh to update auth state
+    } catch (err) {
+      setError(err.message);
     } finally {
-      setIsGenerating(false);
+      setLoading(false);
     }
   };
 
-  // Calculate route details with real elevation data
-  useEffect(() => {
-    if (route && route.length > 1) {
-      let totalDistance = 0;
-      
-      for (let i = 1; i < route.length; i++) {
-        const R = 6371; // Earth's radius in km
-        const dLat = (route[i][0] - route[i-1][0]) * Math.PI / 180;
-        const dLon = (route[i][1] - route[i-1][1]) * Math.PI / 180;
-        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                  Math.cos(route[i-1][0] * Math.PI / 180) * Math.cos(route[i][0] * Math.PI / 180) *
-                  Math.sin(dLon/2) * Math.sin(dLon/2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-        totalDistance += R * c;
-      }
-      
-      const distance = parseFloat(totalDistance.toFixed(2));
-      const duration = Math.round(distance * runDetails.avgPace);
-      
-      // Get real elevation data
-      const getRouteElevation = async () => {
-        try {
-          // Sample coordinates to reduce API calls
-          const sampledRoute = sampleCoordinates(route.map(point => ({lat: point[0], lng: point[1]})), 50);
-          const elevationData = await getOpenElevation(sampledRoute);
-          
-          // Interpolate to match route length for smooth visualization
-          const fullElevationProfile = interpolateElevation(elevationData, route.length);
-          const elevationGain = calculateElevationGain(elevationData);
-          
-          setRunDetails(prev => ({ 
-            ...prev, 
-            distance,
-            duration,
-            elevationGain,
-            elevationProfile: fullElevationProfile
-          }));
-        } catch (error) {
-          console.error('Failed to get elevation data:', error);
-          // Fallback to current simulation
-          const elevationGain = Math.round(distance * 5.5);
-          setRunDetails(prev => ({ 
-            ...prev, 
-            distance,
-            duration,
-            elevationGain,
-            elevationProfile: []
-          }));
-        }
-      };
-      
-      getRouteElevation();
-    } else {
-      setRunDetails(prev => ({ 
-        ...prev, 
-        distance: 0,
-        duration: 0,
-        elevationGain: 0,
-        elevationProfile: []
-      }));
-    }
-  }, [route, runDetails.avgPace]);
-
-  // Handle pace input change
-  const handlePaceInputChange = (e) => {
-    const value = parseFloat(e.target.value);
-    if (!isNaN(value) && value > 0) {
-      setRunDetails(prev => ({...prev, avgPace: value}));
-    }
-  };
-
-  // Handle pace slider change
-  const handlePaceSliderChange = (e) => {
-    const value = parseFloat(e.target.value);
-    setRunDetails(prev => ({...prev, avgPace: value}));
-  };
-
-  const handlePaceUnitChange = (newUnit) => {
-    setRunDetails(prev => {
-      let newAvgPace = prev.avgPace;
-      
-      // Convert pace when switching units
-      if (prev.paceUnit === 'min/km' && newUnit === 'min/mi') {
-        newAvgPace = prev.avgPace * 1.60934; // km pace to mile pace
-      } else if (prev.paceUnit === 'min/mi' && newUnit === 'min/km') {
-        newAvgPace = prev.avgPace / 1.60934; // mile pace to km pace
-      }
-      
-      return {
-        ...prev,
-        paceUnit: newUnit,
-        avgPace: newAvgPace
-      };
-    });
-    
-    // Clear km paces when switching units
-    setKmPaces({});
-  };
-
-  // Format pace for display
-  const formatPace = (pace, unit = runDetails.paceUnit) => {
-    // Convert pace if needed
-    let displayPace = pace;
-    if (unit === 'min/mi' && runDetails.paceUnit === 'min/km') {
-      displayPace = pace * 1.60934; // Convert km to mile pace
-    } else if (unit === 'min/km' && runDetails.paceUnit === 'min/mi') {
-      displayPace = pace / 1.60934; // Convert mile to km pace
-    }
-    
-    const minutes = Math.floor(displayPace);
-    const seconds = Math.round((displayPace - minutes) * 60);
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-  };
+  if (!isOpen) return null;
 
   return (
-    <div className="h-full bg-gray-50 p-6">
-      <div className="space-y-6">{/* removed overflow-y-auto */}
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold text-gray-900">Run Details</h2>
-            
-            {/* Pace Unit Toggle - moved here */}
-            <div>
-              <div className="text-xs text-gray-600 mb-1 text-center">Pace unit</div>
-              <div className="flex bg-gray-200 rounded-lg p-1">
-                <button
-                  onClick={() => handlePaceUnitChange('min/km')}
-                  className={`px-3 py-1 text-sm rounded-md transition-colors ${
-                    runDetails.paceUnit === 'min/km'
-                      ? 'bg-orange-500 text-white'
-                      : 'text-gray-600 hover:text-gray-900'
-                  }`}
-                >
-                  min/km
-                </button>
-                <button
-                  onClick={() => handlePaceUnitChange('min/mi')}
-                  className={`px-3 py-1 text-sm rounded-md transition-colors ${
-                    runDetails.paceUnit === 'min/mi'
-                      ? 'bg-orange-500 text-white'
-                      : 'text-gray-600 hover:text-gray-900'
-                  }`}
-                >
-                  min/mi
-                </button>
-              </div>
-            </div>
-          </div>
-          
-          {/* Run/Bike toggle */}
-          <div className="flex bg-gray-200 rounded-lg p-1 mb-4">
-            <button 
-              onClick={() => setRunDetails(prev => ({...prev, activityType: 'run'}))}
-              className={`flex-1 py-2 text-sm font-medium text-center rounded-md shadow-sm transition-colors ${
-                runDetails.activityType === 'run' ? 'bg-white text-gray-900' : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              Run
-            </button>
-            <button 
-              onClick={() => setRunDetails(prev => ({...prev, activityType: 'bike'}))}
-              className={`flex-1 py-2 text-sm font-medium text-center rounded-md shadow-sm transition-colors ${
-                runDetails.activityType === 'bike' ? 'bg-white text-gray-900' : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              Bike
-            </button>
-          </div>
-        </div>
-
-        {/* Run Stats */}
-        <div className="bg-white rounded-lg p-4">
-          <h3 className="text-sm font-medium text-gray-700 mb-3">Run Stats</h3>
-          <div className="grid grid-cols-2 gap-4">
-            {/* Distance */}
-            <div className="text-center">
-              <div className="flex items-center justify-center mb-2">
-                <Route className="w-7 h-7 text-orange-500" />
-              </div>
-              <div className="text-orange-500 text-2xl font-bold">{runDetails.distance}</div>
-              <div className="text-sm text-gray-500">kilometers</div>
-            </div>
-            
-            {/* Duration */}
-            <div className="text-center">
-              <div className="flex items-center justify-center mb-2">
-                <Clock className="w-7 h-7 text-blue-500" />
-              </div>
-              <div className="text-2xl font-bold">{formatDuration(runDetails.duration)}</div>
-              <div className="text-sm text-gray-500">duration</div>
-            </div>
-            
-            {/* Elevation Gain */}
-            <div className="text-center">
-              <div className="flex items-center justify-center mb-2">
-                <Mountain className="w-7 h-7 text-green-500" />
-              </div>
-              <div className="text-2xl font-bold text-green-600">{runDetails.elevationGain}m</div>
-              <div className="text-sm text-gray-500">elevation gain</div>
-            </div>
-            
-            {/* Average Pace */}
-            <div className="text-center">
-              <div className="flex items-center justify-center mb-2">
-                <Gauge className="w-7 h-7 text-purple-500" />
-              </div>
-              <div className="text-2xl font-bold text-purple-600">{formatPace(runDetails.avgPace)}</div>
-              <div className="text-sm text-gray-500">avg pace {runDetails.paceUnit}</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Pace Info */}
-        <div className="bg-white rounded-lg p-4">
-          <h3 className="text-sm font-medium text-gray-700 mb-3">Pace Info</h3>
-          <div className="space-y-4">
-            {/* Pace Slider and Input Combined */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm">Target Pace</span>
-                <span className="text-orange-500 font-medium">{formatPace(runDetails.avgPace)} {runDetails.paceUnit}</span>
-              </div>
-              
-              {/* Slider only - removed input box */}
-              <div className="flex items-center space-x-3">
-                <input 
-                  type="range" 
-                  min="3.0" 
-                  max="12.0" 
-                  step="0.1"
-                  value={runDetails.avgPace}
-                  onChange={handlePaceSliderChange}
-                  className="flex-1 h-2 bg-orange-200 rounded-lg slider"
-                />
-              </div>
-              
-              <div className="flex justify-between text-xs text-gray-500 mt-1">
-                <span>3:00</span>
-                <span>12:00</span>
-              </div>
-            </div>
-
-            {/* Km-by-Km Pace Breakdown for Running */}
-            {runDetails.activityType === 'run' && runDetails.distance > 0 && (
-              <div className="mt-6">
-                <h4 className="text-sm font-medium text-gray-700 mb-3">
-                  Pace per {runDetails.paceUnit === 'min/mi' ? 'Mile' : 'Km'} (with Elevation)
-                </h4>
-                <div className="max-h-40 overflow-y-auto space-y-2">
-                  {(() => {
-                    const kmCount = Math.ceil(runDetails.distance);
-                    const kmPaces = [];
-                    
-                    // Use real elevation data if available, otherwise fall back to simulation
-                    let kmElevationChanges = [];
-                    if (runDetails.elevationProfile && runDetails.elevationProfile.length > 0) {
-                      kmElevationChanges = getKmElevationChanges(runDetails.elevationProfile, runDetails.distance);
-                    } else {
-                      // Fallback to simulation
-                      const elevationPerKm = runDetails.elevationGain / kmCount;
-                      for (let i = 0; i < kmCount; i++) {
-                        const elevationFactor = Math.sin((i / kmCount) * Math.PI * 2) * 0.2;
-                        kmElevationChanges.push(Math.round(elevationFactor * elevationPerKm));
-                      }
-                    }
-                    
-                    for (let i = 0; i < kmCount; i++) {
-                      const kmElevationChange = kmElevationChanges[i] || 0;
-                      
-                      // Calculate pace adjustment based on elevation change
-                      let paceAdjustment = 0;
-                      if (kmElevationChange > 5) {
-                        // Uphill: slower pace (10-30% increase)
-                        const uphillFactor = Math.min(kmElevationChange / 50, 0.3); // Max 30% slower
-                        paceAdjustment = uphillFactor * runDetails.avgPace;
-                      } else if (kmElevationChange < -5) {
-                        // Downhill: faster pace (5-15% decrease)
-                        const downhillFactor = Math.min(Math.abs(kmElevationChange) / 100, 0.15); // Max 15% faster
-                        paceAdjustment = -downhillFactor * runDetails.avgPace;
-                      }
-                      
-                      const kmPace = runDetails.avgPace + paceAdjustment;
-                      
-                      kmPaces.push(
-                        <div key={i} className="flex items-center justify-between bg-white p-2 rounded border">
-                          <span className="text-sm font-medium">Km {i + 1}</span>
-                          <div className="flex items-center space-x-2">
-                            <span className="text-xs text-gray-500">
-                              {kmElevationChange > 5 
-                                ? `↗️ uphill (+${kmElevationChange}m)` 
-                                : kmElevationChange < -5 
-                                ? `↘️ downhill (${kmElevationChange}m)` 
-                                : '→ flat (0m)'}
-                            </span>
-                            <input
-                              type="text"
-                              className="w-16 px-2 py-1 text-sm border rounded text-center"
-                              value={kmPaces[i] ? decimalToTimeFormat(kmPaces[i]) : decimalToTimeFormat(kmPace)}
-                              onChange={(e) => {
-                                const value = e.target.value;
-                                if (/^\d{1,2}:\d{2}$/.test(value)) {
-                                  const decimal = timeFormatToDecimal(value);
-                                  if (decimal > 0) {
-                                    setKmPaces(prev => ({...prev, [i]: decimal}));
-                                  }
-                                }
-                              }}
-                              onBlur={(e) => {
-                                const value = e.target.value;
-                                if (!/^\d{1,2}:\d{2}$/.test(value) || timeFormatToDecimal(value) <= 0) {
-                                  setKmPaces(prev => {
-                                    const updated = {...prev};
-                                    delete updated[i];
-                                    return updated;
-                                  });
-                                }
-                              }}
-                              placeholder={decimalToTimeFormat(kmPace)}
-                            />
-                            <span className="text-xs text-gray-400">{runDetails.paceUnit}</span>
-                          </div>
-                        </div>
-                      );
-                    }
-                    
-                    return kmPaces;
-                  })()} 
-                </div>
-                <div className="mt-2 text-xs text-gray-500 text-center">
-                  Average: {formatPace(runDetails.avgPace)} {runDetails.paceUnit}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Run Details Form */}
-        <div className="bg-white rounded-lg p-4 space-y-4">
-          {/* Run Name */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Run Name</label>
-            <input
-              type="text"
-              value={runDetails.name}
-              onChange={(e) => setRunDetails(prev => ({...prev, name: e.target.value}))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-            />
-          </div>
-
-          {/* Date */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
-            <input
-              type="date"
-              value={runDetails.date}
-              onChange={(e) => setRunDetails(prev => ({...prev, date: e.target.value}))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-            />
-          </div>
-
-          {/* Start Time */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Start Time</label>
-            <div className="flex space-x-2">
-              <input
-                type="time"
-                value={runDetails.startTime}
-                onChange={(e) => setRunDetails(prev => ({...prev, startTime: e.target.value}))}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-              />
-            </div>
-          </div>
-
-          {/* Description */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
-            <textarea
-              value={runDetails.description}
-              onChange={(e) => setRunDetails(prev => ({...prev, description: e.target.value}))}
-              placeholder="Great morning run through the park"
-              rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-            />
-          </div>
-
-          {/* Error Display */}
-          {error && (
-            <div className="p-3 bg-red-100 border border-red-400 text-red-700 rounded-md">
-              {error}
-            </div>
-          )}
-
-          {/* Create Button */}
-          <button 
-            onClick={handleCreateRun}
-            disabled={isGenerating || route.length < 2}
-            className={`w-full font-semibold py-3 px-4 rounded-md transition-colors ${
-              isGenerating || route.length < 2
-                ? 'bg-gray-400 cursor-not-allowed text-white'
-                : 'bg-orange-500 hover:bg-orange-600 text-white'
-            }`}
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]" onClick={onClose}>
+      <div className="bg-white rounded-lg p-8 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-bold text-gray-900">Sign In</h2>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600"
           >
-            {isGenerating ? 'Generating GPX...' : 'Create Fake Run'}
+            ×
+          </button>
+        </div>
+
+        {error && (
+          <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit}>
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Email
+            </label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+              required
+            />
+          </div>
+
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Password
+            </label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+              required
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-orange-500 hover:bg-orange-600 text-white py-2 px-4 rounded-md font-medium transition-colors disabled:opacity-50"
+          >
+            {loading ? 'Signing In...' : 'Sign In'}
+          </button>
+        </form>
+
+        <div className="mt-4 text-center">
+          <span className="text-gray-600">Don't have an account? </span>
+          <button
+            onClick={onSwitchToRegister}
+            className="text-orange-500 hover:text-orange-600 font-medium"
+          >
+            Sign Up
           </button>
         </div>
       </div>
@@ -843,275 +156,657 @@ const RunDetailsPanel = ({ route, onRunDetailsChange }) => {
   );
 };
 
-const DataVisualization = ({ route, runDetails }) => {
-  // Default values if runDetails is not yet available
-  const defaultRunDetails = {
-    avgPace: 6.0,
-    elevationGain: 50,
-    distance: 5.0,
-    duration: 1800
-  };
-  
-  const details = runDetails || defaultRunDetails;
-  
-  // Generate realistic data based on the actual route
-  const generatePaceData = () => {
-    if (!route || route.length < 2) {
-      return {
-        labels: ['0'],
-        datasets: [{
-          label: 'Pace',
-          data: [details.avgPace],
-          borderColor: '#F97316',
-          backgroundColor: 'rgba(249, 115, 22, 0.1)',
-          tension: 0.4,
-          fill: true,
-        }]
-      };
+// Register Modal Component
+export const RegisterModal = ({ isOpen, onClose, onSwitchToLogin }) => {
+  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match');
+      setLoading(false);
+      return;
     }
 
-    const numPoints = Math.min(route.length, 20);
-    const labels = [];
-    const paceData = [];
-    
-    // Calculate total distance for this route (simplified)
-    const totalDistance = details.distance;
-    
-    for (let i = 0; i < numPoints; i++) {
-      const distanceAlongRoute = (totalDistance * i) / (numPoints - 1);
-      labels.push(distanceAlongRoute.toFixed(1));
-      
-      if (i === 0) {
-        paceData.push(details.avgPace);
-      } else {
-        // Generate realistic pace variation around target pace
-        const variation = (Math.sin(i * 0.5) * 0.3) + (Math.random() - 0.5) * 0.4;
-        const pace = Math.max(3.0, Math.min(12.0, details.avgPace + variation));
-        paceData.push(pace);
-      }
-    }
-    
-    return {
-      labels,
-      datasets: [{
-        label: 'Pace',
-        data: paceData,
-        borderColor: '#F97316',
-        backgroundColor: 'rgba(249, 115, 22, 0.1)',
-        tension: 0.4,
-        fill: true,
-      }]
-    };
-  };
-
-  // Generate elevation data based on route
-  const generateElevationData = () => {
-    if (!route || route.length < 2) {
-      return {
-        labels: ['0'],
-        datasets: [{
-          label: 'Elevation',
-          data: [100],
-          borderColor: '#059669',
-          backgroundColor: 'rgba(5, 150, 105, 0.1)',
-          tension: 0.4,
-          fill: true,
-        }]
-      };
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters long');
+      setLoading(false);
+      return;
     }
 
-    const numPoints = Math.min(route.length, 50); // Increase points for smoother graph
-    const labels = [];
-    let elevationData = [];
-    
-    const totalDistance = details.distance;
-    let currentElevation = 100; // Starting elevation
-    
-    for (let i = 0; i < numPoints; i++) {
-      const distanceAlongRoute = (totalDistance * i) / (numPoints - 1);
-      labels.push(distanceAlongRoute.toFixed(1));
+    try {
+      await authService.register(email, username, password);
+      onClose();
+      window.location.reload(); // Refresh to update auth state
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
     }
-    
-    // Use real elevation data if available
-    if (runDetails && runDetails.elevationProfile && runDetails.elevationProfile.length > 0) {
-      // Sample the elevation data to match the number of chart points
-      const elevationProfile = runDetails.elevationProfile;
-      
-      if (elevationProfile.length === numPoints) {
-        elevationData = elevationProfile;
-      } else {
-        // Interpolate elevation data to match chart points
-        for (let i = 0; i < numPoints; i++) {
-          const ratio = (elevationProfile.length - 1) * i / (numPoints - 1);
-          const lowerIndex = Math.floor(ratio);
-          const upperIndex = Math.ceil(ratio);
-          
-          if (lowerIndex === upperIndex) {
-            elevationData.push(elevationProfile[lowerIndex]);
-          } else {
-            const weight = ratio - lowerIndex;
-            const interpolatedValue = elevationProfile[lowerIndex] * (1 - weight) + 
-                                     elevationProfile[upperIndex] * weight;
-            elevationData.push(interpolatedValue);
-          }
-        }
-      }
-    } else {
-      // Fallback to simulation
-      for (let i = 0; i < numPoints; i++) {
-        const progressRatio = i / (numPoints - 1);
-        const baseElevationGain = details.elevationGain * progressRatio;
-        const hillVariation = Math.sin(i * 0.8) * 15;
-        const noise = (Math.random() - 0.5) * 10;
-        currentElevation = 100 + baseElevationGain + hillVariation + noise;
-        elevationData.push(Math.max(50, currentElevation));
-      }
-    }
-    
-    return {
-      labels,
-      datasets: [{
-        label: 'Elevation',
-        data: elevationData,
-        borderColor: '#059669',
-        backgroundColor: 'rgba(5, 150, 105, 0.1)',
-        tension: 0.4,
-        fill: true,
-      }]
-    };
   };
 
-  const paceData = generatePaceData();
-  const elevationData = generateElevationData();
-
-  const chartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    scales: {
-      x: {
-        grid: {
-          display: false,
-        },
-      },
-      y: {
-        grid: {
-          color: '#e5e7eb',
-        },
-      },
-    },
-    plugins: {
-      legend: {
-        display: false,
-      },
-      tooltip: {
-        mode: 'index',
-        intersect: false,
-      },
-    },
-  };
-
-  const elevationChartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    scales: {
-      x: {
-        grid: {
-          display: false,
-        },
-        title: {
-          display: true,
-          text: 'Distance (km)'
-        }
-      },
-      y: {
-        grid: {
-          color: '#e5e7eb',
-        },
-        title: {
-          display: true,
-          text: 'Elevation (m)'
-        },
-        // Auto-scale based on data range
-        beginAtZero: false,
-      },
-    },
-    plugins: {
-      legend: {
-        display: false,
-      },
-      tooltip: {
-        mode: 'index',
-        intersect: false,
-        callbacks: {
-          label: function(context) {
-            return `Elevation: ${Math.round(context.parsed.y)}m`;
-          }
-        }
-      },
-    },
-  };
+  if (!isOpen) return null;
 
   return (
-    <div className="bg-white px-6 py-8">
-      <div className="max-w-7xl mx-auto">
-        <h2 className="text-xl font-semibold text-gray-900 mb-6">Data Visualization</h2>
-        
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Pace Profile */}
-          <div className="bg-gray-50 rounded-lg p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-medium text-gray-900">Pace Profile</h3>
-              <span className="text-sm text-gray-500">Average: {Math.floor(details.avgPace)}:{Math.round((details.avgPace % 1) * 60).toString().padStart(2, '0')} min/km over total</span>
-            </div>
-            <div className="h-64">
-              <Line data={paceData} options={chartOptions} />
-            </div>
-            <div className="mt-2 text-xs text-gray-500 text-center">Distance (km)</div>
-          </div>
-
-          {/* Elevation Profile */}
-          <div className="bg-gray-50 rounded-lg p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-medium text-gray-900">Elevation Profile</h3>
-              <span className="text-sm text-gray-500">Total Gain: {details.elevationGain}m</span>
-            </div>
-            <div className="h-64">
-              <Line data={elevationData} options={elevationChartOptions} />
-            </div>
-            <div className="mt-2 text-xs text-gray-500 text-center">Distance (km)</div>
-          </div>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]" onClick={onClose}>
+      <div className="bg-white rounded-lg p-8 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-bold text-gray-900">Sign Up</h2>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600"
+          >
+            ×
+          </button>
         </div>
 
-        {/* Additional Stats */}
-        <div className="mt-8 grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-          <div className="bg-gray-50 rounded-lg p-4">
-            <div className="text-2xl font-bold text-gray-900">{details.distance.toFixed(1)}</div>
-            <div className="text-sm text-gray-500">Total Distance</div>
+        {error && (
+          <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+            {error}
           </div>
-          <div className="bg-gray-50 rounded-lg p-4">
-            <div className="text-2xl font-bold text-gray-900">{Math.floor(details.duration / 60)}:{(details.duration % 60).toString().padStart(2, '0')}</div>
-            <div className="text-sm text-gray-500">Total Time</div>
+        )}
+
+        <form onSubmit={handleSubmit}>
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Email
+            </label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+              required
+            />
           </div>
-          <div className="bg-gray-50 rounded-lg p-4">
-            <div className="text-2xl font-bold text-gray-900">{Math.floor(details.avgPace)}:{Math.round((details.avgPace % 1) * 60).toString().padStart(2, '0')}</div>
-            <div className="text-sm text-gray-500">Avg Pace</div>
+
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Username
+            </label>
+            <input
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+              required
+            />
           </div>
-          <div className="bg-gray-50 rounded-lg p-4">
-            <div className="text-2xl font-bold text-gray-900">{details.elevationGain}m</div>
-            <div className="text-sm text-gray-500">Elevation Gain</div>
+
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Password
+            </label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+              required
+            />
           </div>
+
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Confirm Password
+            </label>
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+              required
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-orange-500 hover:bg-orange-600 text-white py-2 px-4 rounded-md font-medium transition-colors disabled:opacity-50"
+          >
+            {loading ? 'Creating Account...' : 'Create Account'}
+          </button>
+        </form>
+
+        <div className="mt-4 text-center">
+          <span className="text-gray-600">Already have an account? </span>
+          <button
+            onClick={onSwitchToLogin}
+            className="text-orange-500 hover:text-orange-600 font-medium"
+          >
+            Sign In
+          </button>
         </div>
       </div>
     </div>
   );
 };
 
-export const CreateRouteMain = () => {
+export const Header = ({ currentPage, onNavigate }) => {
+  const [user, setUser] = useState(authService.getUser());
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showRegisterModal, setShowRegisterModal] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+
+  const handleLogout = () => {
+    authService.logout();
+    setUser(null);
+    setShowUserMenu(false);
+    window.location.reload();
+  };
+
+  const switchToRegister = () => {
+    setShowLoginModal(false);
+    setShowRegisterModal(true);
+  };
+
+  const switchToLogin = () => {
+    setShowRegisterModal(false);
+    setShowLoginModal(true);
+  };
+
+  return (
+    <>
+      <header className="bg-white border-b border-gray-200 px-6 py-4">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          <div className="flex items-center space-x-8">
+            <div className="flex items-center space-x-2">
+              <div className="w-8 h-8 bg-orange-500 rounded flex items-center justify-center">
+                <Play className="w-5 h-5 text-white" />
+              </div>
+              <span className="text-xl font-bold text-gray-900">Fake My Run</span>
+            </div>
+            <nav className="hidden md:flex space-x-6">
+              <button 
+                onClick={() => onNavigate('create')}
+                className={`transition-colors ${
+                  currentPage === 'create' 
+                    ? 'text-orange-500 font-medium' 
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Create Route
+              </button>
+              {user && (
+                <button 
+                  onClick={() => onNavigate('saved')}
+                  className={`transition-colors ${
+                    currentPage === 'saved' 
+                      ? 'text-orange-500 font-medium' 
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Saved Routes
+                </button>
+              )}
+              <button 
+                onClick={() => onNavigate('how-it-works')}
+                className={`transition-colors ${
+                  currentPage === 'how-it-works' 
+                    ? 'text-orange-500 font-medium' 
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                How It Works
+              </button>
+              <a href="#" className="text-gray-600 hover:text-gray-900 transition-colors">How To Upload</a>
+            </nav>
+          </div>
+          <div className="flex items-center space-x-4">
+            {user ? (
+              <div className="relative">
+                <button
+                  onClick={() => setShowUserMenu(!showUserMenu)}
+                  className="flex items-center space-x-2 text-gray-700 hover:text-gray-900 transition-colors"
+                >
+                  <User className="w-5 h-5" />
+                  <span>{user.username}</span>
+                </button>
+                {showUserMenu && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50">
+                    <div className="px-4 py-2 text-sm text-gray-700 border-b">
+                      {user.email}
+                    </div>
+                    <button
+                      onClick={handleLogout}
+                      className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    >
+                      <LogOut className="w-4 h-4 mr-2" />
+                      Sign Out
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => setShowLoginModal(true)}
+                  className="flex items-center space-x-1 text-gray-600 hover:text-gray-900 transition-colors"
+                >
+                  <LogIn className="w-4 h-4" />
+                  <span>Sign In</span>
+                </button>
+                <button
+                  onClick={() => setShowRegisterModal(true)}
+                  className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-md transition-colors flex items-center space-x-1"
+                >
+                  <UserPlus className="w-4 h-4" />
+                  <span>Sign Up</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </header>
+
+      <LoginModal 
+        isOpen={showLoginModal} 
+        onClose={() => setShowLoginModal(false)}
+        onSwitchToRegister={switchToRegister}
+      />
+      <RegisterModal 
+        isOpen={showRegisterModal} 
+        onClose={() => setShowRegisterModal(false)}
+        onSwitchToLogin={switchToLogin}
+      />
+    </>
+  );
+};
+
+// MapTypeSelector is now imported from components/Map/MapTypeSelector
+
+
+
+
+// Add this new component before the CreateRouteMain component
+const SaveRouteModal = ({ isOpen, onClose, onSave, existingNames, defaultName = '' }) => {
+  const [routeName, setRouteName] = useState('');
+  const [showOverwriteConfirm, setShowOverwriteConfirm] = useState(false);
+  const [error, setError] = useState('');
+
+  // Set default name when modal opens
+  useEffect(() => {
+    if (isOpen && defaultName) {
+      setRouteName(defaultName);
+    }
+  }, [isOpen, defaultName]);
+
+  const handleSave = async () => {
+    if (!routeName.trim()) {
+      setError('Please enter a route name');
+      return;
+    }
+
+    // Check if name already exists
+    if (existingNames.includes(routeName.trim())) {
+      setShowOverwriteConfirm(true);
+      return;
+    }
+
+    onSave(routeName.trim());
+    handleClose();
+  };
+
+  const handleOverwrite = () => {
+    onSave(routeName.trim(), true); // true indicates overwrite
+    handleClose();
+  };
+
+  const handleClose = () => {
+    setRouteName('');
+    setShowOverwriteConfirm(false);
+    setError('');
+    onClose();
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]" onClick={handleClose}>
+      <div className="bg-white rounded-lg p-6 w-96 max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
+        {!showOverwriteConfirm ? (
+          <>
+            <h3 className="text-lg font-semibold mb-4">Save Route</h3>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Route Name
+              </label>
+              <input
+                type="text"
+                value={routeName}
+                onChange={(e) => {
+                  setRouteName(e.target.value);
+                  setError('');
+                }}
+                onKeyPress={(e) => e.key === 'Enter' && handleSave()}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                placeholder="Enter route name..."
+                autoFocus
+              />
+              {error && (
+                <p className="text-red-500 text-sm mt-1">{error}</p>
+              )}
+            </div>
+            <div className="flex space-x-3">
+              <button
+                onClick={handleClose}
+                className="flex-1 px-4 py-2 text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSave}
+                className="flex-1 px-4 py-2 bg-orange-500 text-white rounded-md hover:bg-orange-600 transition-colors"
+              >
+                Save Route
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <h3 className="text-lg font-semibold mb-4">Route Already Exists</h3>
+            <p className="text-gray-600 mb-6">
+              A route named "{routeName}" already exists. Do you want to overwrite it?
+            </p>
+            <div className="flex space-x-3">
+              <button
+                onClick={() => setShowOverwriteConfirm(false)}
+                className="flex-1 px-4 py-2 text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleOverwrite}
+                className="flex-1 px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors"
+              >
+                Overwrite
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export const CreateRouteMain = ({ loadedRoute }) => {
   const [route, setRoute] = useState([]);
   const [runDetails, setRunDetails] = useState(null);
+  const [heartRateDetails, setHeartRateDetails] = useState(null); // Add this new state
   const [searchQuery, setSearchQuery] = useState('');
   const [mapCenter, setMapCenter] = useState([40.7128, -74.0060]); // Default to NYC, will be updated with user location
+  const [shouldCenter, setShouldCenter] = useState(true); // Add this line
   const [isSearching, setIsSearching] = useState(false);
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [existingRouteNames, setExistingRouteNames] = useState([]);
+  const [showSaveNotification, setShowSaveNotification] = useState(false);
+  const [defaultRouteName, setDefaultRouteName] = useState('');
+  const [isGeneratingGpx, setIsGeneratingGpx] = useState(false);
+  // Add clickedPoints state here
+  const [clickedPoints, setClickedPoints] = useState([]);
+
+  // Fetch existing route names when component mounts
+  useEffect(() => {
+    const fetchExistingRoutes = async () => {
+      console.log('fetchExistingRoutes called');
+      console.log('Is authenticated:', authService.isAuthenticated());
+      console.log('Token exists:', !!authService.getToken());
+      
+      // Only fetch if authenticated
+      if (!authService.isAuthenticated()) {
+        console.log('Not authenticated, returning early');
+        setExistingRouteNames([]);
+        return;
+      }
+      
+      console.log('Making API call to /api/routes');
+      try {
+        const response = await fetch('http://localhost:8000/api/routes', {
+          headers: {
+            ...authService.getAuthHeaders(),
+          },
+        });
+        if (response.ok) {
+          const routes = await response.json();
+          setExistingRouteNames(routes.map(route => route.name));
+        } else if (response.status === 401) {
+          authService.logout();
+          window.location.reload();
+        }
+      } catch (err) {
+        console.error('Error fetching existing routes:', err);
+      }
+    };
+    fetchExistingRoutes();
+  }, []);
+
+  const saveRoute = async (routeName, overwrite = false) => {
+    if (!authService.isAuthenticated()) {
+      alert('Please sign in to save routes');
+      return;
+    }
+
+    if (route.length === 0) {
+      alert('Please create a route first before saving.');
+      return;
+    }
+
+    try {
+      // Use originalRunDetails if available, otherwise calculate fallback values
+      let finalRunDetails;
+      
+      if (runDetails && runDetails.distance > 0) {
+        // Use the properly calculated values from RunDetailsPanel
+        finalRunDetails = {
+          route_name: routeName,
+          distance: runDetails.distance,
+          duration: runDetails.duration,
+          pace: runDetails.avgPace ? String(runDetails.avgPace) : "6:00",
+          calories: runDetails.calories || Math.round(runDetails.distance * 70),
+          elevation_gain: runDetails.elevationGain || 0,
+          activity_type: runDetails.activityType || 'run',
+          name: runDetails.name || 'Morning Run',
+          date: runDetails.date || new Date().toISOString().split('T')[0],
+          start_time: runDetails.startTime || '08:00',
+          description: runDetails.description || '',
+          // Add heart rate data
+          heart_rate_enabled: runDetails.heartRateEnabled || false,
+          avg_heart_rate: runDetails.avgHeartRate || 140,
+          pace_unit: runDetails.paceUnit || 'min/km',
+          elevation_profile: runDetails.elevationProfile || [],
+          original_elevation_data: runDetails.originalElevationData || null
+        };
+      } else {
+        // Fallback: Calculate values if runDetails is not available
+        let totalDistance = 0;
+        if (route.length > 1) {
+          for (let i = 1; i < route.length; i++) {
+            const lat1 = route[i-1][0];
+            const lon1 = route[i-1][1];
+            const lat2 = route[i][0];
+            const lon2 = route[i][1];
+            
+            const R = 6371;
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                      Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            totalDistance += R * c;
+          }
+        }
+
+        finalRunDetails = {
+          route_name: routeName,
+          distance: totalDistance || 0,
+          duration: (totalDistance * 6 * 60) || 0,
+          pace: "6:00",
+          calories: Math.round(totalDistance * 70) || 0,
+          elevation_gain: 0,
+          activity_type: 'run',
+          name: 'Morning Run',
+          date: new Date().toISOString().split('T')[0],
+          start_time: '08:00',
+          description: '',
+          // Add default heart rate data
+          heart_rate_enabled: false,
+          avg_heart_rate: 140,
+          pace_unit: 'min/km',
+          elevation_profile: [],
+          original_elevation_data: null
+        };
+      }
+
+      console.log('Saving route with data:', {
+        coordinates: route,
+        runDetails: finalRunDetails,
+        originalRunDetails: runDetails,
+        routeLength: route.length,
+        usingOriginalData: !!(runDetails && runDetails.distance > 0)
+      });
+
+      const response = await fetch(`http://localhost:8000/api/routes${overwrite ? '?overwrite=true' : ''}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...authService.getAuthHeaders(),
+        },
+        body: JSON.stringify({
+          coordinates: route,
+          runDetails: finalRunDetails
+        })
+      });
+
+      if (response.ok) {
+        setShowSaveNotification(true);
+        setShowSaveModal(false);
+        
+        // Refresh existing route names
+        const routesResponse = await fetch('http://localhost:8000/api/routes', {
+          headers: {
+            ...authService.getAuthHeaders(),
+          },
+        });
+        if (routesResponse.ok) {
+          const routes = await routesResponse.json();
+          setExistingRouteNames(routes.map(route => route.name));
+        }
+      } else if (response.status === 401) {
+        authService.logout();
+        window.location.reload();
+      } else {
+        const errorData = await response.json();
+        console.log('Server error response:', errorData); // Debug log
+        console.log('Error detail type:', typeof errorData.detail); // Additional debug
+        console.log('Error detail content:', errorData.detail); // Additional debug
+        
+        // Fix: Properly handle errorData.detail which might be an object
+        let errorDetail = 'Failed to save route';
+        if (errorData.detail) {
+          if (typeof errorData.detail === 'string') {
+            errorDetail = errorData.detail;
+          } else if (Array.isArray(errorData.detail)) {
+            // Handle validation errors array - improved formatting
+            errorDetail = errorData.detail.map(err => {
+              if (typeof err === 'string') {
+                return err;
+              } else if (err.msg && err.loc) {
+                // FastAPI validation error format
+                return `${err.loc.join('.')}: ${err.msg}`;
+              } else {
+                return JSON.stringify(err);
+              }
+            }).join('; ');
+          } else {
+            // Handle object detail
+            errorDetail = JSON.stringify(errorData.detail);
+          }
+        }
+        
+        throw new Error(errorDetail);
+      }
+    } catch (err) {
+      console.error('Error saving route:', err);
+      // Fix: Better error handling to avoid [object Object] display
+      let errorMessage = 'Unknown error occurred';
+      
+      if (err.message) {
+        errorMessage = err.message;
+      } else if (typeof err === 'string') {
+        errorMessage = err;
+      } else if (err.toString && typeof err.toString === 'function') {
+        errorMessage = err.toString();
+      }
+      
+      alert('Error saving route: ' + errorMessage);
+    }
+  };
+
+  const handleSaveClick = () => {
+    // Generate default route name with Activity Name + date and time
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('en-US', { 
+      month: '2-digit', 
+      day: '2-digit', 
+      year: 'numeric' 
+    });
+    const timeStr = now.toLocaleTimeString('en-US', { 
+      hour: '2-digit', 
+      minute: '2-digit',
+      hour12: false 
+    });
+    const defaultRouteName = `${runDetails?.name || 'My Run'} - ${dateStr} ${timeStr}`;
+    
+    setDefaultRouteName(defaultRouteName);
+    setShowSaveModal(true);
+  };
+
+  // Add effect to load a route when passed from saved routes
+  useEffect(() => {
+    if (loadedRoute) {
+      const fullRoute = loadedRoute.coordinates || [];
+      setRoute(fullRoute);
+      setRunDetails(loadedRoute.run_details || null);
+      
+      // Extract waypoints from the full route by sampling key points
+      // This is a heuristic approach since we don't have the original clicked points
+      let extractedWaypoints = [];
+      if (fullRoute.length > 0) {
+        // Always include the first point
+        extractedWaypoints.push(fullRoute[0]);
+        
+        // For routes with many points, sample waypoints at regular intervals
+        if (fullRoute.length > 10) {
+          const step = Math.max(1, Math.floor(fullRoute.length / 8)); // Extract ~8 waypoints
+          for (let i = step; i < fullRoute.length - 1; i += step) {
+            extractedWaypoints.push(fullRoute[i]);
+          }
+        } else {
+          // For shorter routes, use every 2nd or 3rd point
+          const step = Math.max(1, Math.floor(fullRoute.length / 4));
+          for (let i = step; i < fullRoute.length - 1; i += step) {
+            extractedWaypoints.push(fullRoute[i]);
+          }
+        }
+        
+        // Always include the last point if it's different from the first
+        if (fullRoute.length > 1) {
+          extractedWaypoints.push(fullRoute[fullRoute.length - 1]);
+        }
+      }
+      
+      setClickedPoints(extractedWaypoints);
+    }
+  }, [loadedRoute]);
 
   // Get user's current location on component mount
   useEffect(() => {
@@ -1120,11 +815,12 @@ export const CreateRouteMain = () => {
         (position) => {
           const { latitude, longitude } = position.coords;
           setMapCenter([latitude, longitude]);
+          setShouldCenter(true); // Trigger initial centering
           console.log('User location set:', latitude, longitude);
         },
         (error) => {
           console.log('Geolocation failed, using default location (NYC):', error);
-          // Keep default NYC location if geolocation fails
+          setShouldCenter(true); // Center on default location
         },
         {
           enableHighAccuracy: true,
@@ -1150,6 +846,7 @@ export const CreateRouteMain = () => {
         const lat = parseFloat(data[0].lat);
         const lon = parseFloat(data[0].lon);
         setMapCenter([lat, lon]);
+        setShouldCenter(true); // Trigger centering for search
       } else {
         alert('Location not found. Please try a different search term.');
       }
@@ -1174,15 +871,16 @@ export const CreateRouteMain = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 pb-20">
       {/* Main Content */}
-      <div className="flex p-4 gap-4 min-h-[80vh]">
-        {/* Left Panel - Map */}
-        <div className="flex-1">
+      <div className="flex p-4 gap-4">
+        {/* Left Panel - Map and Data Visualization */}
+        <div className="flex-1 space-y-4">
           <div className="bg-white rounded-lg shadow-lg h-[80vh] overflow-hidden relative">
             <div className="absolute top-4 left-4 z-[1000]">
               <div className="bg-white bg-opacity-90 rounded-lg shadow-lg px-4 py-3 mb-4 w-fit">
                 <h1 className="text-2xl font-bold text-gray-900">Create Your Custom Route</h1>
+                <p className="text-sm text-gray-600 mt-1">Click on map to add points</p>
               </div>
               <form onSubmit={handleSearchSubmit} className="flex space-x-2">
                 <div className="flex-1 relative">
@@ -1214,6 +912,7 @@ export const CreateRouteMain = () => {
                   onClick={() => navigator.geolocation?.getCurrentPosition(
                     (position) => {
                       setMapCenter([position.coords.latitude, position.coords.longitude]);
+                      setShouldCenter(true); // Trigger centering for geolocation
                     },
                     (error) => {
                       console.error('Geolocation error:', error);
@@ -1228,44 +927,46 @@ export const CreateRouteMain = () => {
               </form>
             </div>
             
-            {/* Click instruction - moved to top right */}
-            <div className="absolute top-4 right-4 z-[1000]">
-              <div className="bg-orange-500 text-white px-3 py-2 rounded-lg shadow-lg">
-                <div className="text-sm font-medium whitespace-nowrap">Click on map to add points</div>
-              </div>
-            </div>
-            
             <DrawableMap 
               route={route} 
               setRoute={setRoute} 
               mapCenter={mapCenter}
               setMapCenter={setMapCenter}
+              shouldCenter={shouldCenter}
+              setShouldCenter={setShouldCenter}
+              runDetails={runDetails}
+              saveRoute={saveRoute}
+              clickedPoints={clickedPoints}
+              setClickedPoints={setClickedPoints}
+            />
+          </div>
+          
+          {/* Data Visualization - now inside left panel */}
+          <div className="bg-white rounded-lg shadow-lg">
+            <DataVisualization 
+              route={route} 
+              runDetails={runDetails} 
+              heartRateDetails={heartRateDetails} // Add this new prop
             />
           </div>
         </div>
 
         {/* Right Panel - Run Details */}
         <div className="w-96">
-          <div className="bg-white rounded-lg shadow-lg h-[80vh]">
-            <RunDetailsPanel route={route} onRunDetailsChange={setRunDetails} />
+          <div className="bg-white rounded-lg shadow-lg relative z-[1001]">
+            <RunDetailsPanel 
+              route={loadedRoute}
+              routeCoordinates={route}
+              onRunDetailsChange={setRunDetails}
+              onHeartRateChange={setHeartRateDetails}
+              saveRoute={handleSaveClick}
+            />
           </div>
-        </div>
-      </div>
-
-      {/* Data Visualization - positioned to match map width */}
-      <div className="flex space-x-4 px-4 mb-4">
-        <div className="flex-1">
-          <div className="bg-white rounded-lg shadow-lg">
-            <DataVisualization route={route} runDetails={runDetails} />
-          </div>
-        </div>
-        <div className="w-96">
-          {/* Empty space to match right panel width */}
         </div>
       </div>
 
       {/* Footer */}
-      <footer className="bg-white border-t border-gray-200 py-4 px-6 mt-4">
+      <footer className="bg-white border-t border-gray-200 py-4 px-6 mt-8">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="text-sm text-gray-500">
             © 2026 FakeMyRun. All rights reserved.
@@ -1276,6 +977,74 @@ export const CreateRouteMain = () => {
           </div>
         </div>
       </footer>
+      
+      <SaveRouteModal 
+        isOpen={showSaveModal}
+        onClose={() => setShowSaveModal(false)}
+        onSave={saveRoute}
+        existingNames={existingRouteNames}
+        defaultName={defaultRouteName}
+      />
+      
+      <NotificationModal
+        isOpen={showSaveNotification}
+        onClose={() => setShowSaveNotification(false)}
+        type="success"
+        title="Route Saved"
+        message="Your route has been saved successfully!"
+      />
+    </div>
+  );
+};
+
+
+
+export const AppMain = () => {
+  const [currentPage, setCurrentPage] = useState('create');
+  const [loadedRoute, setLoadedRoute] = useState(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(authService.isAuthenticated());
+
+  const handleNavigation = (page) => {
+    // Redirect to login if trying to access saved routes without authentication
+    if (page === 'saved' && !isAuthenticated) {
+      alert('Please sign in to view your saved routes');
+      return;
+    }
+    setCurrentPage(page);
+  };
+
+  const handleBackToCreate = (route = null) => {
+    setLoadedRoute(route);
+    setCurrentPage('create');
+  };
+
+  return (
+    <div className="App">
+      <Header currentPage={currentPage} onNavigate={handleNavigation} />
+      {currentPage === 'create' ? (
+        <CreateRouteMain loadedRoute={loadedRoute} />
+      ) : currentPage === 'saved' ? (
+        isAuthenticated ? (
+          <SavedRoutesPage onBackToCreate={handleBackToCreate} />
+        ) : (
+          <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+            <div className="text-center">
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">Sign In Required</h2>
+              <p className="text-gray-600 mb-6">Please sign in to view your saved routes.</p>
+              <button
+                onClick={() => setCurrentPage('create')}
+                className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded-md transition-colors"
+              >
+                Go to Create Route
+              </button>
+            </div>
+          </div>
+        )
+      ) : currentPage === 'how-it-works' ? (
+        <HowItWorksPage onBackToCreate={handleBackToCreate} />
+      ) : (
+        <SavedRoutesPage onBackToCreate={handleBackToCreate} />
+      )}
     </div>
   );
 };
