@@ -11,18 +11,7 @@ export const startIcon = L.divIcon({
       border: 3px solid white;
       box-shadow: 0 2px 4px rgba(0,0,0,0.3);
       position: relative;
-    ">
-      <div style="
-        position: absolute;
-        top: -8px;
-        left: 50%;
-        transform: translateX(-50%);
-        color: white;
-        font-size: 12px;
-        font-weight: bold;
-        text-shadow: 1px 1px 2px rgba(0,0,0,0.7);
-      ">S</div>
-    </div>
+    "></div>
   `,
   iconSize: [20, 20],
   iconAnchor: [10, 10]
@@ -39,18 +28,7 @@ export const endIcon = L.divIcon({
       border: 3px solid white;
       box-shadow: 0 2px 4px rgba(0,0,0,0.3);
       position: relative;
-    ">
-      <div style="
-        position: absolute;
-        top: -8px;
-        left: 50%;
-        transform: translateX(-50%);
-        color: white;
-        font-size: 12px;
-        font-weight: bold;
-        text-shadow: 1px 1px 2px rgba(0,0,0,0.7);
-      ">E</div>
-    </div>
+    "></div>
   `,
   iconSize: [20, 20],
   iconAnchor: [10, 10]

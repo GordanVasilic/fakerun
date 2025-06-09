@@ -282,15 +282,32 @@ export const SavedRoutesPage = ({ onBackToCreate }) => {
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
           {/* Search Bar */}
           <div className="flex items-center space-x-4 mb-4">
-            <div className="flex-1 relative">
+            <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
               <input
                 type="text"
                 placeholder="Search routes by name..."
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={handleSearchChange}
+                onFocus={handleSearchFocus}
+                onBlur={handleSearchBlur}
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
               />
+              
+              {/* Suggestions dropdown */}
+              {showSuggestions && suggestions.length > 0 && (
+                <div className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg mt-1 max-h-40 overflow-y-auto z-10">
+                  {suggestions.map((suggestion, index) => (
+                    <div
+                      key={index}
+                      onClick={() => handleSuggestionClick(suggestion)}
+                      className="px-3 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                    >
+                      {suggestion}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
             <button
               onClick={() => setShowFilters(!showFilters)}

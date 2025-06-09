@@ -60,7 +60,13 @@ body {
 }
 
 .leaflet-control-zoom {
-  display: none;
+  display: block !important;
+  position: absolute !important;
+  top: auto !important;
+  left: auto !important;
+  bottom: 20px !important;
+  right: 20px !important;
+  z-index: 1000 !important;
 }
 
 /* Custom scrollbar */

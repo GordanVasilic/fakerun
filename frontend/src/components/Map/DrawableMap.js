@@ -1,20 +1,41 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { debounce } from 'lodash'; // or implement your own debounce function
 import { MapContainer, TileLayer, Polyline, Marker, useMap, useMapEvents } from 'react-leaflet';
 import { startIcon, endIcon, waypointIcon } from '../Map/mapIcons';
 import MapTypeSelector from './MapTypeSelector';
+import { Search, MapPin, X } from 'lucide-react';
 
-const DrawableMap = ({ 
-  route, 
-  setRoute, 
-  mapCenter, 
-  setMapCenter, 
-  shouldCenter, 
-  setShouldCenter, 
-  runDetails, 
-  saveRoute,
-  clickedPoints,
-  setClickedPoints
-}) => {
+const DrawableMap = (props) => {
+  console.log('🔍 Raw props received:', props);
+
+  const {
+    route, 
+    setRoute, 
+    mapCenter, 
+    setMapCenter, 
+    shouldCenter, 
+    setShouldCenter, 
+    runDetails, 
+    saveRoute,
+    clickedPoints,
+    setClickedPoints,
+    searchQuery = '', // Provide default values
+    setSearchQuery = () => console.warn('setSearchQuery not provided'),
+    isSearching = false,
+    setIsSearching = () => console.warn('setIsSearching not provided')
+  } = props;
+
+   // Verify the types after destructuring
+   console.log('🏗️ After destructuring:', {
+    searchQuery: { type: typeof searchQuery, value: searchQuery },
+    setSearchQuery: { type: typeof setSearchQuery, value: setSearchQuery },
+    isSearching: { type: typeof isSearching, value: isSearching },
+    setIsSearching: { type: typeof setIsSearching, value: setIsSearching }
+  });
+
+  // ... rest of existing code ...
+
+
   const [routeCoordinates, setRouteCoordinates] = useState([]);
   
   // Add state for dragging
@@ -36,15 +57,106 @@ const DrawableMap = ({
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
   });
   
-  // Add debounce state for route recalculation
+  // Add state for route recalculation
   const [routeRecalcTimeout, setRouteRecalcTimeout] = useState(null);
-  
-  // Add state for route recalculation loading
   const [isRecalculatingRoute, setIsRecalculatingRoute] = useState(false);
-  
-  // Add state for delayed loading notification
   const [delayedLoadingTimeout, setDelayedLoadingTimeout] = useState(null);
   
+   const [searchResults, setSearchResults] = useState([]);
+   const [showSuggestions, setShowSuggestions] = useState(false);
+
+   const searchLocation = async (query) => {
+    if (!query || !query.trim() || query.trim().length < 3) {
+      setSearchResults([]);
+      setShowSuggestions(false);
+      return;
+    }
+  
+    // Add null check for setIsSearching
+    if (setIsSearching) {
+      setIsSearching(true);
+    }
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5`
+      );
+      const data = await response.json();
+      setSearchResults(data);
+      setShowSuggestions(data.length > 0);
+    } catch (error) {
+      console.error('Search error:', error);
+      setSearchResults([]);
+      setShowSuggestions(false);
+    } finally {
+      // Add null check for setIsSearching
+      if (setIsSearching) {
+        setIsSearching(false);
+      }
+    }
+  };
+
+  const debouncedSearch = useCallback(
+    debounce((query) => searchLocation(query), 300),
+    [setIsSearching]
+  );
+
+  const handleSearchChange = (e) => {
+    const value = e.target.value;
+    
+    console.log('🔍 handleSearchChange called:', {
+      value,
+      setSearchQuery: typeof setSearchQuery,
+      setSearchQueryExists: typeof setSearchQuery === 'function'
+    });
+    
+    // Safety check before calling setSearchQuery
+    if (typeof setSearchQuery === 'function') {
+      setSearchQuery(value);
+      
+      if (value.length >= 4) {
+        debouncedSearch(value);
+      }
+    } else {
+      console.error('❌ setSearchQuery is not a function:', {
+        type: typeof setSearchQuery,
+        value: setSearchQuery
+      });
+    }
+  };
+
+
+  const handleSearchFocus = () => {
+    console.log('🎯 Search input focused, isSearching:', isSearching);
+    setShowSuggestions(searchResults.length > 0);
+  };
+
+  const handleSearchBlur = () => {
+    console.log('👋 Search input blurred');
+    setTimeout(() => {
+      setShowSuggestions(false);
+    }, 200);
+  };
+
+  const handleSuggestionClick = (result) => {
+    const lat = parseFloat(result.lat);
+    const lon = parseFloat(result.lon);
+    setMapCenter([lat, lon]);
+    setShouldCenter(true);
+    if (setSearchQuery) {
+      setSearchQuery(result.display_name);
+    }
+    setShowSuggestions(false);
+    setSearchResults([]);
+  };
+
+  const clearSearch = () => {
+    if (setSearchQuery) {
+      setSearchQuery('');
+    }
+    setSearchResults([]);
+    setShowSuggestions(false);
+  };
+
   // Sync local routeCoordinates with route prop when it changes (for loaded routes)
   useEffect(() => {
     if (route && route.length > 0) {
@@ -168,30 +280,45 @@ const DrawableMap = ({
         setRouteCoordinates(newClickedPoints);
         setRoute(newClickedPoints);
       } else {
-        // Instead of rebuilding from scratch, just remove the last segment
-        // Find the last clicked point in the current route and truncate there
-        const lastClickedPoint = newClickedPoints[newClickedPoints.length - 1];
-        const currentRoute = routeCoordinates;
+        // Set up delayed loading notification (appears after 500ms)
+        const timeoutId = setTimeout(() => {
+          setIsRecalculatingRoute(true);
+        }, 500);
+        setDelayedLoadingTimeout(timeoutId);
         
-        // Find the index of the last clicked point in the current route
-        let truncateIndex = -1;
-        for (let i = currentRoute.length - 1; i >= 0; i--) {
-          const coord = currentRoute[i];
-          if (Math.abs(coord[0] - lastClickedPoint[0]) < 0.0001 && 
-              Math.abs(coord[1] - lastClickedPoint[1]) < 0.0001) {
-            truncateIndex = i;
-            break;
+        try {
+          // Instead of rebuilding from scratch, just remove the last segment
+          // Find the last clicked point in the current route and truncate there
+          const lastClickedPoint = newClickedPoints[newClickedPoints.length - 1];
+          const currentRoute = routeCoordinates;
+          
+          // Find the index of the last clicked point in the current route
+          let truncateIndex = -1;
+          for (let i = currentRoute.length - 1; i >= 0; i--) {
+            const coord = currentRoute[i];
+            if (Math.abs(coord[0] - lastClickedPoint[0]) < 0.0001 && 
+                Math.abs(coord[1] - lastClickedPoint[1]) < 0.0001) {
+              truncateIndex = i;
+              break;
+            }
           }
-        }
-        
-        if (truncateIndex !== -1) {
-          // Truncate the route at the last clicked point
-          const newRoute = currentRoute.slice(0, truncateIndex + 1);
-          setRouteCoordinates(newRoute);
-          setRoute(newRoute);
-        } else {
-          // Fallback: rebuild if we can't find the point (shouldn't happen normally)
-          await rebuildRouteFromClickedPoints(newClickedPoints);
+          
+          if (truncateIndex !== -1) {
+            // Truncate the route at the last clicked point
+            const newRoute = currentRoute.slice(0, truncateIndex + 1);
+            setRouteCoordinates(newRoute);
+            setRoute(newRoute);
+          } else {
+            // Fallback: rebuild if we can't find the point (shouldn't happen normally)
+            await rebuildRouteFromClickedPoints(newClickedPoints);
+          }
+        } finally {
+          // Clear the timeout and hide loading if it was shown
+          if (timeoutId) {
+            clearTimeout(timeoutId);
+          }
+          setDelayedLoadingTimeout(null);
+          setIsRecalculatingRoute(false);
         }
       }
     }
@@ -498,151 +625,259 @@ const DrawableMap = ({
     );
   };
 
+  // Add missing marker drag handler functions
+  const handleMarkerClick = (index) => {
+    // Optional: Add any click behavior for markers
+    console.log(`Marker ${index} clicked`);
+  };
+
+  const handleMarkerDragStart = (index) => {
+    setIsDragging(true);
+    setDraggedPointIndex(index);
+  };
+
+  const handleMarkerDragEnd = (e, index) => {
+    setIsDragging(false);
+    setDraggedPointIndex(null);
+    const newPosition = e.target.getLatLng();
+    // Trigger route recalculation when drag ends
+    handleWaypointDrag(index, newPosition);
+  };
+
+  // Remove the entire search UI section (around lines 565-600)
+  // Replace the search UI with just the map container
+  
   return (
-    <div className="relative h-full">
-      <MapContainer 
-        center={mapCenter} 
-        zoom={13} 
-        className="h-full w-full cursor-crosshair"
-        zoomControl={false}
+    <div 
+      className="relative w-full h-full"
+      onClick={closeContextMenu} // Add this to close context menu on outside click
+    >
+      <MapContainer
+        center={mapCenter}
+        zoom={13}
+        className="w-full h-full"
+        whenCreated={(map) => {
+          // Map initialization logic
+        }}
       >
-        <TileLayer
-          url={mapType.url}
-          attribution={mapType.attribution}
-        />
-        <MapController center={mapCenter} shouldCenter={shouldCenter} />
-        <MapEvents />
-        
-        {route.length > 1 && (
-          <Polyline 
-            positions={route} 
-            color="#F97316" 
+        // Around line 580-582, replace the incorrect component references:
+            <TileLayer
+              url={mapType.url}
+              attribution={mapType.attribution}
+            />
+            
+            <MapEvents />
+            <MapController center={mapCenter} shouldCenter={shouldCenter} />
+            
+            {/* Route polyline */}
+            {routeCoordinates.length > 1 && (
+          <Polyline
+            positions={routeCoordinates}
+            color="#ff6b35"
             weight={4}
             opacity={0.8}
           />
         )}
         
-        {clickedPoints.length > 0 && (
-          <>
-            {/* Render draggable clicked waypoints */}
-            {clickedPoints.map((coord, index) => {
-              if (index === 0) {
-                // Draggable start marker
-                return createDraggableMarker(coord, index, startIcon);
-              } else if (index === clickedPoints.length - 1 && clickedPoints.length > 1) {
-                // Draggable end marker
-                return createDraggableMarker(coord, index, endIcon);
-              } else {
-                // Draggable intermediate waypoint markers
-                return createDraggableMarker(coord, index, waypointIcon);
+        {/* Route markers - show only clicked points, not interpolated route */}
+        {clickedPoints.map((point, index) => (
+          <Marker
+            key={index}
+            position={Array.isArray(point) ? point : [point.lat, point.lng]}
+            icon={index === 0 ? startIcon : index === clickedPoints.length - 1 ? endIcon : waypointIcon}
+            eventHandlers={{
+              click: () => handleMarkerClick(index),
+              dragstart: () => handleMarkerDragStart(index),
+              dragend: (e) => handleMarkerDragEnd(e, index),
+              contextmenu: (e) => {
+                // Right-click to show context menu
+                e.originalEvent.preventDefault();
+                e.originalEvent.stopPropagation();
+                
+                // Get the mouse position relative to the viewport
+                setContextMenu({
+                  show: true,
+                  x: e.originalEvent.clientX,
+                  y: e.originalEvent.clientY,
+                  pointIndex: index
+                });
               }
-            })}
-          </>
-        )}
+            }}
+            draggable={true}
+          />
+        ))}  
       </MapContainer>
       
-      {/* Map Type Selector */}
-      <MapTypeSelector 
-        selectedMapType={mapType}
-        onMapTypeChange={setMapType}
-      />
-      
-      {/* Route Controls - styled like orange buttons */}
-      <div className="absolute bottom-4 left-4 z-[1000] flex space-x-2">
-        <button 
-          onClick={removeLastPoint}
-          disabled={clickedPoints.length === 0}
-          className="bg-orange-500 hover:bg-orange-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white px-3 py-2 rounded-lg shadow-lg text-sm font-medium transition-colors"
-        >
-          Remove last point
-        </button>
-        <button 
-          onClick={clearRoute}
-          disabled={clickedPoints.length === 0}
-          className="bg-red-500 hover:bg-red-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white px-3 py-2 rounded-lg shadow-lg text-sm font-medium transition-colors"
-        >
-          Clear route
-        </button>
-      </div>
-
-      {/* Zoom Controls - moved to bottom right */}
-      <div className="absolute bottom-16 right-4 bg-white rounded-lg shadow-lg p-1 z-[1000]">
-        <div className="flex flex-col">
-          <button className="p-2 hover:bg-gray-100 text-lg font-bold transition-colors">+</button>
-          <button className="p-2 hover:bg-gray-100 text-lg font-bold transition-colors">−</button>
-        </div>
-      </div>
-      
-      {/* Loading notification for route recalculation */}
+      {/* Loading overlay */}
       {isRecalculatingRoute && (
-        <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-blue-500 text-white px-6 py-3 rounded-lg shadow-lg z-[1000] flex items-center">
-          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-          Recalculating route...
+        <div className="absolute inset-0 bg-black bg-opacity-20 flex items-center justify-center z-[1000] pointer-events-none">
+          <div className="bg-white rounded-lg shadow-lg px-4 py-2 flex items-center space-x-2">
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+            <span className="text-sm font-medium text-gray-700">Recalculating route...</span>
+          </div>
         </div>
       )}
       
       {/* Context Menu */}
       {contextMenu.show && (
-        <>
-          {/* Backdrop to close menu when clicking outside */}
-          <div 
-            className="fixed inset-0 z-[1001]" 
-            onClick={closeContextMenu}
-          />
-          
-          {/* Context Menu */}
-          <div 
-            className="fixed bg-white border border-gray-300 rounded-lg shadow-lg py-1 z-[1002]"
-            style={{
-              left: `${contextMenu.x}px`,
-              top: `${contextMenu.y}px`
-            }}
+        <div 
+          className="absolute bg-white border border-gray-300 rounded-lg shadow-lg py-1 z-[1001]"
+          style={{
+            left: `${contextMenu.x}px`,
+            top: `${contextMenu.y}px`,
+            transform: 'translate(-50%, -100%)' // Position above the cursor
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={handleContextMenuDelete}
+            className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center space-x-2"
           >
-            <button
-              className="w-full px-4 py-2 text-left text-red-600 hover:bg-red-50 flex items-center"
-              onClick={handleContextMenuDelete}
-            >
-              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-              Delete this point
-            </button>
-          </div>
-        </>
-      )}
-      
-      {/* Delete Confirmation Modal */}
-      {showDeleteModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[10000]">
-          <div className="bg-white rounded-lg shadow-xl p-6 max-w-sm mx-4">
-            <div className="flex items-center mb-4">
-              <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center mr-3">
-                <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900">Delete Point</h3>
-            </div>
-            <p className="text-gray-600 mb-6">
-              Are you sure you want to delete this waypoint? This action cannot be undone.
-            </p>
-            <div className="flex space-x-3">
-              <button
-                onClick={cancelDelete}
-                className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors duration-200 font-medium"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmDelete}
-                className="flex-1 px-4 py-2 text-white bg-red-600 hover:bg-red-700 rounded-md transition-colors duration-200 font-medium"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+            <span>Delete point</span>
+          </button>
         </div>
       )}
+      
+      {/* Map control buttons - lower left corner */}
+      <div className="absolute bottom-4 left-4 flex flex-col space-y-2 z-[1000]">
+        {/* Remove last point button */}
+        {clickedPoints.length > 0 && (
+          <button
+            onClick={removeLastPoint}
+            disabled={isRecalculatingRoute}
+            className="bg-white hover:bg-gray-50 disabled:bg-gray-100 disabled:cursor-not-allowed border border-gray-300 rounded-lg px-3 py-2 shadow-lg flex items-center space-x-2 text-sm font-medium text-gray-700 hover:text-gray-900 transition-colors"
+            title="Remove last point"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+            <span>Remove Last Point</span>
+          </button>
+        )}
+        
+        {/* Clear map button */}
+        {clickedPoints.length > 0 && (
+          <button
+            onClick={clearRoute}
+            disabled={isRecalculatingRoute}
+            className="bg-white hover:bg-gray-50 disabled:bg-gray-100 disabled:cursor-not-allowed border border-gray-300 rounded-lg px-3 py-2 shadow-lg flex items-center space-x-2 text-sm font-medium text-gray-700 hover:text-gray-900 transition-colors"
+            title="Clear entire route"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+            <span>Clear Map</span>
+          </button>
+        )}
+      </div>
+
+            {/* Search UI with suggestions */}
+            <div className="absolute top-4 left-4 z-[1000] w-80">
+        <div className="bg-white bg-opacity-90 rounded-lg shadow-lg px-4 py-3 mb-4">
+          <h1 className="text-2xl font-bold text-gray-900">Create Your Custom Route</h1>
+          <p className="text-sm text-gray-600 mt-1">Click on map to add points</p>
+        </div>
+        
+        <div className="relative">
+          <div className="flex space-x-2">
+          <div className="flex-1 relative" onClick={(e) => e.stopPropagation()}>
+            <input
+                type="text"
+                placeholder="Search for a location..."
+                value={searchQuery || ''}
+                onChange={handleSearchChange}
+                onFocus={handleSearchFocus}
+                onBlur={handleSearchBlur}
+                onKeyDown={(e) => {
+                  console.log('⌨️ KeyDown event:', {
+                    key: e.key,
+                    code: e.code,
+                    target: e.target.tagName,
+                    disabled: e.target.disabled,
+                    readOnly: e.target.readOnly,
+                    isSearching
+                  });
+                }}
+                onInput={(e) => {
+                  console.log('📝 Input event:', {
+                    value: e.target.value,
+                    inputType: e.inputType,
+                    disabled: e.target.disabled
+                  });
+                }}
+                className="w-full pl-10 pr-10 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent shadow-sm"
+                
+              />
+              <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
+              {searchQuery && searchQuery.trim().length > 0 && !isSearching && (
+      <button
+        type="button"
+        onClick={clearSearch}
+        onMouseDown={(e) => e.preventDefault()} // Prevent input blur
+        className="absolute right-3 top-2.5 h-5 w-5 text-gray-400 hover:text-gray-600 transition-colors"
+        title="Clear search"
+      >
+        <X className="h-4 w-4" />
+      </button>
+    )}
+              {isSearching && (
+                <div className="absolute right-3 top-2.5">
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-orange-500"></div>
+                </div>
+              )}
+            </div>
+            
+            <button 
+              type="button"
+              onClick={() => navigator.geolocation?.getCurrentPosition(
+                (position) => {
+                  setMapCenter([position.coords.latitude, position.coords.longitude]);
+                  setShouldCenter(true);
+                },
+                (error) => {
+                  console.error('Geolocation error:', error);
+                  alert('Unable to get your location. Please search for a location instead.');
+                }
+              )}
+              className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center shadow-sm transition-colors"
+              title="Use my location"
+            >
+              <MapPin className="w-4 h-4" />
+            </button>
+          </div>
+          
+                    {/* Search Suggestions Dropdown */}
+                    {showSuggestions && searchResults.length > 0 && searchQuery && searchQuery.trim().length >= 4 && (
+            <div className="search-suggestions absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto z-[1001]">
+              {searchResults.slice(0, 5).map((result, index) => (
+                <button
+                  key={index}
+                  onMouseDown={(e) => e.preventDefault()} // Prevent input blur
+                  onClick={() => handleSuggestionClick(result)}
+                  className="w-full px-4 py-3 text-left hover:bg-gray-50 border-b border-gray-100 last:border-b-0 flex items-start space-x-3"
+                >
+                  <MapPin className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-gray-900 truncate">
+                      {result.display_name.split(',')[0]}
+                    </div>
+                    <div className="text-xs text-gray-500 truncate">
+                      {result.display_name}
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+      
+      {/* Fix the MapTypeSelector props */}
+      <MapTypeSelector selectedMapType={mapType} onMapTypeChange={setMapType} />
+      
     </div>
   );
 };

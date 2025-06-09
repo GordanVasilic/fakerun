@@ -10,8 +10,6 @@ import DataVisualization from '../Charts/DataVisualization';
 
 // Move this to the top of the file, after imports
 const activityTypeOptions = [
-  { value: 'Running', label: '🏃 Running' },
-  { value: 'Cycling', label: '🚴 Cycling' },
   { value: 'Walking', label: '🚶 Walking' },
   { value: 'Hiking', label: '🥾 Hiking' },
   { value: 'Swimming', label: '🏊 Swimming' },
@@ -55,8 +53,17 @@ const RunDetailsPanel = ({
   // State for GPX generation
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState('');
-
-  // State for pace and heart rate per kilometer
+  // Effect to set appropriate default pace when activity type changes
+  useEffect(() => {
+    if (runDetails.activityType === 'Bike' && runDetails.pace === 6.0) {
+      // Set default bike speed to 25 km/h (2.4 min/km)
+      setRunDetails(prev => ({ ...prev, pace: 2.4 }));
+    } else if (runDetails.activityType === 'Run' && runDetails.pace === 2.4) {
+      // Set default running pace to 6.0 min/km
+      setRunDetails(prev => ({ ...prev, pace: 6.0 }));
+    }
+  }, [runDetails.activityType]);
+    // State for pace and heart rate per kilometer
   const [kmPaces, setKmPaces] = useState({});
   const [kmHeartRates, setKmHeartRates] = useState({});
   
@@ -448,6 +455,31 @@ const RunDetailsPanel = ({
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
+        // Helper function to convert pace (min/km) to speed (km/h)
+      const paceToSpeed = (pace) => {
+        return 60 / pace; // Convert minutes per km to km per hour
+      };
+
+      // Helper function to convert speed (km/h) to pace (min/km)
+      const speedToPace = (speed) => {
+        return 60 / speed; // Convert km per hour to minutes per km
+      };
+
+      // Helper function to format speed
+      const formatSpeed = (pace) => {
+        const speed = paceToSpeed(pace);
+        return `${speed.toFixed(1)} km/h`;
+      };
+
+      // Helper function to get appropriate label based on activity type
+      const getPaceSpeedLabel = (activityType, pace) => {
+        return activityType === 'Bike' ? formatSpeed(pace) : formatPace(pace);
+      };
+
+      // Helper function to get appropriate unit label
+      const getPaceSpeedUnit = (activityType) => {
+        return activityType === 'Bike' ? 'km/h' : 'min/km';
+      };
   // Single main return statement
   // The return statement should have this structure:
   return (
@@ -566,7 +598,7 @@ const RunDetailsPanel = ({
             <div className="text-sm text-gray-600">Elevation Gain</div>
           </div>
           
-          {/* Average Pace */}
+          {/* Average Pace/Speed */}
           <div className="text-center">
             <div className="flex items-center justify-center mb-1">
               <svg className="w-6 h-6 text-purple-500 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -574,177 +606,89 @@ const RunDetailsPanel = ({
               </svg>
             </div>
             <div className="text-2xl font-bold text-orange-600">
-              {formatPace(runDetails.pace)}
+              {getPaceSpeedLabel(runDetails.activityType, runDetails.pace)}
             </div>
-            <div className="text-sm text-gray-600">min/km</div>
+            <div className="text-sm text-gray-600">
+              {runDetails.activityType === 'Bike' ? 'Avg Speed' : 'Avg Pace'}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Pace Controls Section */}
-      {runDetails.distance > 0 && (
-        <div className="bg-white rounded-lg p-4 shadow-sm max-w-full overflow-hidden space-y-4">
-          <h3 className="text-lg font-semibold mb-4 text-gray-800 flex items-center">
-            <span className="mr-2">⏱️</span>
-            Pace Settings
-          </h3>
-          
-          {/* Average Pace Slider */}
-          <div className="max-w-full">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Average Pace: {formatPace(runDetails.pace)}
-            </label>
-            <input
-              type="range"
-              min="1"
-              max="12"
-              step="0.003"
-              value={runDetails.pace}
-              onChange={(e) => setRunDetails(prev => ({ ...prev, pace: parseFloat(e.target.value) }))}
-              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
-            />
-            <div className="flex justify-between text-xs text-gray-500 mt-1">
-              <span>1:00 min/km</span>
-              <span>12:00 min/km</span>
-            </div>
-          </div>
-          
-          {/* Pace Variation Slider */}
-          <div className="max-w-full">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Pace Variation: {runDetails.paceVariation}%
-            </label>
-            <input
-              type="range"
-              min="0"
-              max="80"
-              step="1"
-              value={runDetails.paceVariation}
-              onChange={(e) => setRunDetails(prev => ({ ...prev, paceVariation: parseInt(e.target.value) }))}
-              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
-            />
-            <div className="flex justify-between text-xs text-gray-500 mt-1">
-              <span>0% (Constant)</span>
-              <span>80% (High variation)</span>
-            </div>
-            <div className="text-xs text-gray-500 mt-1">
-              {runDetails.paceVariation === 0 ? 
-                'Constant pace throughout the run (most efficient)' :
-                `Natural pace variation of ±${Math.round(runDetails.pace * runDetails.paceVariation / 100 * 60)}s per km`
-              }
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Pace per KM Breakdown */}
-      {runDetails.distance > 0 && (
-        <div className="bg-white rounded-lg p-4 shadow-sm max-w-full overflow-hidden">
-          <h3 className="text-lg font-semibold mb-4 text-gray-800 flex items-center">
-            <span className="mr-2">📊</span>
-            Pace per Kilometer
-          </h3>
-          <div className="max-h-64 overflow-y-auto">
-            {/* Header */}
-            <div className="grid grid-cols-4 gap-2 text-sm font-semibold text-gray-600 mb-3 pb-2 border-b-2 border-gray-200 bg-gray-50 p-2 rounded-t">
-              <div className="text-center">KM</div>
-              <div className="text-center">Pace</div>
-              <div className="text-center">Elevation</div>
-              {runDetails.heartRateEnabled && <div className="text-center">Heart Rate</div>}
+        {/* Pace/Speed Controls Section */}
+        {runDetails.distance > 0 && (
+          <div className="bg-white rounded-lg p-4 shadow-sm max-w-full overflow-hidden space-y-4">
+            <h3 className="text-lg font-semibold mb-4 text-gray-800 flex items-center">
+              <span className="mr-2">⏱️</span>
+              {runDetails.activityType === 'Bike' ? 'Speed Settings' : 'Pace Settings'}
+            </h3>
+            
+                       {/* Average Pace/Speed Slider */}
+                       <div className="max-w-full">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                {runDetails.activityType === 'Bike' ? 'Average Speed' : 'Average Pace'}: {getPaceSpeedLabel(runDetails.activityType, runDetails.pace)}
+              </label>
+              <input
+                type="range"
+                min={runDetails.activityType === 'Bike' ? "0.667" : "1"} // 0.667 min/km = 90 km/h max for bike
+                max={runDetails.activityType === 'Bike' ? "8.571" : "12"} // 8.571 min/km = 7 km/h min for bike
+                step="0.003"
+                value={runDetails.activityType === 'Bike' ? (9.238 - runDetails.pace) : runDetails.pace} // Invert value for bike to show 7km/h on left
+                onChange={(e) => {
+                  const newValue = runDetails.activityType === 'Bike' 
+                    ? (9.238 - parseFloat(e.target.value)) // Invert back for bike
+                    : parseFloat(e.target.value);
+                  setRunDetails(prev => ({ ...prev, pace: newValue }));
+                }}
+                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
+              />
+              <div className="flex justify-between text-xs text-gray-500 mt-1">
+                {runDetails.activityType === 'Bike' ? (
+                  <>
+                    <span>7 km/h</span>
+                    <span>90 km/h</span>
+                  </>
+                ) : (
+                  <>
+                    <span>1:00 min/km</span>
+                    <span>12:00 min/km</span>
+                  </>
+                )}
+              </div>
             </div>
             
-            {/* Data Rows */}
-            <div className="space-y-1">
-              {(() => {
-                // Calculate km-specific paces based on elevation changes
-                const calculateKmPaces = (basePace, paceVariability, kmElevationChanges) => {
-                  const kmCount = Math.ceil(runDetails.distance);
-                  const kmPaces = {};
-                  const adjustments = [];
-                  
-                  // First pass: calculate all adjustments
-                  for (let i = 0; i < kmCount; i++) {
-                    const elevationChange = kmElevationChanges[i] || 0;
-                    
-                    // Base pace adjustment based on elevation
-                    let paceAdjustment = 0;
-                    if (elevationChange > 10) {
-                      // Uphill: slower pace
-                      paceAdjustment = Math.min(2.0, elevationChange * 0.015);
-                    } else if (elevationChange < -10) {
-                      // Downhill: faster pace  
-                      paceAdjustment = Math.max(-0.8, elevationChange * 0.008);
-                    }
-                    
-                    // Add some natural pace variation
-                    const sineVariation = Math.sin((i / kmCount) * Math.PI * 4) * 0.2; // -0.2 to +0.2
-                    const randomVariation = (Math.random() - 0.5) * 0.3; // -0.15 to +0.15
-                    const naturalVariation = sineVariation + randomVariation;
-                    
-                    // Combine elevation and natural variation
-                    const totalVariation = paceAdjustment + naturalVariation;
-                    
-                    // Scale by pace variability (0% = no variation, 100% = full variation)
-                    const scaledAdjustment = totalVariation * (paceVariability / 100);
-                    
-                    adjustments.push(scaledAdjustment);
-                  }
-                  
-                  // Calculate average adjustment to center around target pace
-                  const avgAdjustment = adjustments.reduce((sum, adj) => sum + adj, 0) / adjustments.length;
-                  
-                  // Second pass: apply centered adjustments
-                  for (let i = 0; i < kmCount; i++) {
-                    const centeredAdjustment = adjustments[i] - avgAdjustment;
-                    const kmPace = Math.max(3.0, Math.min(12.0, basePace + centeredAdjustment));
-                    kmPaces[i] = kmPace;
-                  }
-                  
-                  return kmPaces;
-                };
-                
-                // Calculate the km-specific paces using the pace variation slider value
-                const calculatedKmPaces = calculateKmPaces(runDetails.pace, runDetails.paceVariation, kmElevationChanges);
-                
-                return Array.from({ length: Math.ceil(runDetails.distance) }, (_, i) => {
-                  const km = i + 1;
-                  const elevationChange = kmElevationChanges[i] || 0;
-                  const kmPace = calculatedKmPaces[i] || runDetails.pace;
-                  const heartRate = runDetails.heartRateEnabled ? (kmHeartRates[i] || runDetails.avgHeartRate) : null;
-                
-                  return (
-                    <div key={km} className={`grid grid-cols-4 gap-2 text-sm py-2 px-2 rounded transition-colors hover:bg-gray-50 ${
-                      km <= runDetails.distance ? 'text-gray-800 bg-white' : 'text-gray-400 bg-gray-50'
-                    } border border-gray-100`}>
-                      <div className="font-semibold text-center text-blue-600">#{km}</div>
-                      <div className="text-center font-mono font-medium">{formatPace(kmPace)}</div>
-                      <div className={`text-center font-medium ${
-                        elevationChange > 10 ? 'text-red-600 bg-red-50' : 
-                        elevationChange < -10 ? 'text-green-600 bg-green-50' : 'text-gray-600'
-                      } rounded px-1`}>
-                        {elevationChange > 0 ? '↗️ +' : elevationChange < 0 ? '↘️ ' : '➡️ '}{Math.round(Math.abs(elevationChange))}m
-                      </div>
-                      {runDetails.heartRateEnabled && (
-                        <div className="text-center font-medium text-red-500 bg-red-50 rounded px-1">
-                          ❤️ {Math.round(heartRate)}
-                        </div>
-                      )}
-                    </div>
-                  );
-                });
-              })()}
+            {/* Pace/Speed Variation Slider */}
+            <div className="max-w-full">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                {runDetails.activityType === 'Bike' ? 'Speed' : 'Pace'} Variation: {runDetails.paceVariation}%
+              </label>
+              <input
+                type="range"
+                min="0"
+                max="80"
+                step="1"
+                value={runDetails.paceVariation}
+                onChange={(e) => setRunDetails(prev => ({ ...prev, paceVariation: parseInt(e.target.value) }))}
+                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
+              />
+              <div className="flex justify-between text-xs text-gray-500 mt-1">
+                <span>0% (Constant)</span>
+                <span>80% (High variation)</span>
+              </div>
+              <div className="text-xs text-gray-500 mt-1">
+                {runDetails.paceVariation === 0 ? 
+                  `Constant ${runDetails.activityType === 'Bike' ? 'speed' : 'pace'} throughout the ${runDetails.activityType === 'Bike' ? 'ride' : 'run'} (most efficient)` :
+                  runDetails.activityType === 'Bike' ?
+                    `Natural speed variation of ±${(paceToSpeed(runDetails.pace) * runDetails.paceVariation / 100).toFixed(1)} km/h` :
+                    `Natural pace variation of ±${Math.round(runDetails.pace * runDetails.paceVariation / 100 * 60)}s per km`
+                }
+              </div>
             </div>
           </div>
-          
-          {/* Footer Note */}
-          <div className="text-xs text-gray-500 mt-3 p-2 bg-blue-50 rounded border-l-4 border-blue-200">
-            <span className="font-medium">💡 Note:</span> Pace adjusts based on elevation changes and natural variation
-          </div>
-        </div>
-      )}
-      
-      {/* Heart Rate Controls Section */}
-      <div className="bg-white p-4 rounded-lg shadow-sm space-y-4 max-w-full overflow-hidden">
+        )}
+
+            {/* Heart Rate Controls Section - moved above pace breakdown */}
+            <div className="bg-white p-4 rounded-lg shadow-sm space-y-4 max-w-full overflow-hidden">
         {/* Heart Rate Toggle */}
         <div className="flex items-center space-x-3">
           <label className="flex items-center cursor-pointer">
@@ -803,12 +747,143 @@ const RunDetailsPanel = ({
               className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
             />
             <div className="flex justify-between text-xs text-gray-500 mt-1">
-              <span>Flat Terrain</span>
-              <span>Hilly Terrain</span>
+              <span>1 bpm</span>
+              <span>40 bpm</span>
             </div>
           </div>
         )}
       </div>
+
+      {/* Pace per KM Breakdown */}
+      {runDetails.distance > 0 && (
+        <div className="bg-white rounded-lg p-4 shadow-sm max-w-full overflow-hidden">
+          <h3 className="text-lg font-semibold mb-4 text-gray-800 flex items-center">
+            <span className="mr-2">📊</span>
+            {runDetails.activityType === 'Bike' ? 'Speed' : 'Pace'} per Kilometer
+          </h3>
+          <div className="max-h-64 overflow-y-auto">
+            {/* Header */}
+            <div className="grid grid-cols-4 gap-2 text-sm font-semibold text-gray-600 mb-3 pb-2 border-b-2 border-gray-200 bg-gray-50 p-2 rounded-t">
+              <div className="text-center">KM</div>
+              <div className="text-center">{runDetails.activityType === 'Bike' ? 'Speed (km/h)' : 'Pace (min/km)'}</div>
+              <div className="text-center">Elevation</div>
+              {runDetails.heartRateEnabled && <div className="text-center">Heart Rate</div>}
+            </div>
+            
+            {/* Data Rows */}
+            <div className="space-y-1">
+              {(() => {
+                // Calculate km-specific paces based on elevation changes
+                const calculateKmPaces = (basePace, paceVariability, kmElevationChanges) => {
+                  const kmCount = Math.ceil(runDetails.distance);
+                  const kmPaces = {};
+                  const adjustments = [];
+                  
+                  // Determine if we're working with bike activity
+                  const isBike = runDetails.activityType === 'Bike';
+                  const baseValue = isBike ? paceToSpeed(basePace) : basePace; // Convert to speed for bikes
+                  
+                  // First pass: calculate all adjustments
+                  for (let i = 0; i < kmCount; i++) {
+                    const elevationChange = kmElevationChanges[i] || 0;
+                    
+                    // Base adjustment based on elevation
+                    let adjustment = 0;
+                    if (elevationChange > 10) {
+                      // Uphill
+                      if (isBike) {
+                        // For bikes: reduce speed
+                        adjustment = -Math.min(8.0, elevationChange * 0.06); // Reduce speed
+                      } else {
+                        // For running: slower pace (increase time)
+                        adjustment = Math.min(2.0, elevationChange * 0.015);
+                      }
+                    } else if (elevationChange < -10) {
+                      // Downhill
+                      if (isBike) {
+                        // For bikes: increase speed
+                        adjustment = Math.max(-4.0, -elevationChange * 0.04); // Increase speed
+                      } else {
+                        // For running: faster pace (decrease time)
+                        adjustment = Math.max(-0.8, elevationChange * 0.008);
+                      }
+                    }
+                    
+                    // Add some natural variation
+                    const sineVariation = Math.sin((i / kmCount) * Math.PI * 4) * (isBike ? 1.0 : 0.2);
+                    const randomVariation = (Math.random() - 0.5) * (isBike ? 1.5 : 0.3);
+                    const naturalVariation = sineVariation + randomVariation;
+                    
+                    // Combine elevation and natural variation
+                    const totalVariation = adjustment + naturalVariation;
+                    
+                    // Scale by pace variability (0% = no variation, 100% = full variation)
+                    const scaledAdjustment = totalVariation * (paceVariability / 100);
+                    
+                    adjustments.push(scaledAdjustment);
+                  }
+                  
+                  // Calculate average adjustment to center around target value
+                  const avgAdjustment = adjustments.reduce((sum, adj) => sum + adj, 0) / adjustments.length;
+                  
+                  // Second pass: apply centered adjustments
+                  for (let i = 0; i < kmCount; i++) {
+                    const centeredAdjustment = adjustments[i] - avgAdjustment;
+                    
+                    if (isBike) {
+                      // For bikes: work with speed, then convert back to pace for storage
+                      const adjustedSpeed = Math.max(5.0, Math.min(50.0, baseValue + centeredAdjustment));
+                      const kmPace = speedToPace(adjustedSpeed); // Convert back to pace for storage
+                      kmPaces[i] = kmPace;
+                    } else {
+                      // For running: work with pace directly
+                      const kmPace = Math.max(3.0, Math.min(12.0, baseValue + centeredAdjustment));
+                      kmPaces[i] = kmPace;
+                    }
+                  }
+                  
+                  return kmPaces;
+                };
+                
+                // Calculate the km-specific paces using the pace variation slider value
+                const calculatedKmPaces = calculateKmPaces(runDetails.pace, runDetails.paceVariation, kmElevationChanges);
+                
+                return Array.from({ length: Math.ceil(runDetails.distance) }, (_, i) => {
+                  const km = i + 1;
+                  const elevationChange = kmElevationChanges[i] || 0;
+                  const kmPace = calculatedKmPaces[i] || runDetails.pace;
+                  const heartRate = runDetails.heartRateEnabled ? (kmHeartRates[i] || runDetails.avgHeartRate) : null;
+                
+                  return (
+                    <div key={km} className={`grid grid-cols-4 gap-2 text-sm py-2 px-2 rounded transition-colors hover:bg-gray-50 ${
+                      km <= runDetails.distance ? 'text-gray-800 bg-white' : 'text-gray-400 bg-gray-50'
+                    } border border-gray-100`}>
+                      <div className="font-semibold text-center text-blue-600">#{km}</div>
+                      <div className="text-center font-mono font-medium">{getPaceSpeedLabel(runDetails.activityType, kmPace)}</div>
+                      <div className={`text-center font-medium ${
+                        elevationChange > 10 ? 'text-red-600 bg-red-50' : 
+                        elevationChange < -10 ? 'text-green-600 bg-green-50' : 'text-gray-600'
+                      } rounded px-1`}>
+                        {elevationChange > 0 ? '↗️ +' : elevationChange < 0 ? '↘️ ' : '➡️ '}{Math.round(Math.abs(elevationChange))}m
+                      </div>
+                      {runDetails.heartRateEnabled && (
+                        <div className="text-center font-medium text-red-500 bg-red-50 rounded px-1">
+                          ❤️ {Math.round(heartRate)}
+                        </div>
+                      )}
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+          </div>
+          
+          {/* Footer Note */}
+          <div className="text-xs text-gray-500 mt-3 p-2 bg-blue-50 rounded border-l-4 border-blue-200">
+            <span className="font-medium">💡 Note:</span> Pace adjusts based on elevation changes and natural variation
+          </div>
+        </div>
+      )}
 
       {/* Activity Details Form */}
       <div className="bg-white rounded-lg p-4">

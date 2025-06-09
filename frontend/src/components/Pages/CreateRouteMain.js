@@ -1,8 +1,16 @@
-import React, { useState, useEffect } from 'react';
 import { MapContainer, TileLayer, Polyline, Marker, useMapEvents, useMap } from 'react-leaflet';
 import { Search, MapPin, Edit3, MoreHorizontal, Play, Trash2, Route, Clock, Mountain, Gauge, Minus, RotateCcw } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
+import { authService } from '../../services/auth';
+import MapTypeSelector from '../Map/MapTypeSelector';
+import { startIcon, endIcon, waypointIcon } from '../Map/mapIcons';
+import DataVisualization from '../Charts/DataVisualization';
+import DrawableMap from '../Map/DrawableMap'; 
+import RunDetailsPanel from '../Panels/RunDetailsPanel'; // Add this import
+import { SaveRouteModal } from '../../components'; // Changed this line
+import NotificationModal from '../Modals/NotificationModal';
+import React, { useState, useEffect } from 'react';
 import { 
   elevationCache, 
   sampleCoordinates, 
@@ -11,12 +19,9 @@ import {
   interpolateElevation, 
   getKmElevationChanges 
 } from '../../utils/elevation';
-import { authService } from '../../services/auth';
-import MapTypeSelector from '../Map/MapTypeSelector';
-import { startIcon, endIcon, waypointIcon } from '../Map/mapIcons';
-import DataVisualization from '../Charts/DataVisualization';
-import SaveRouteModal from '../Modals/SaveRouteModal';
-import NotificationModal from '../Modals/NotificationModal';
+
+
+
 
 // Fix for default markers in react-leaflet
 delete L.Icon.Default.prototype._getIconUrl;
@@ -26,32 +31,12 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
 
-// DrawableMap component (extracted from components.js)
-const DrawableMap = ({
-  route, 
-  setRoute, 
-  mapCenter, 
-  setMapCenter, 
-  shouldCenter, 
-  setShouldCenter, 
-  runDetails, 
-  saveRoute, 
-  clickedPoints, 
-  setClickedPoints
-}) => {
-  // ... (I need to extract the complete DrawableMap implementation)
-};
-
-// RunDetailsPanel component (extracted from components.js)
-const RunDetailsPanel = ({ route, onRunDetailsChange, saveRoute, routeCoordinates }) => {
-  // ... (I need to extract the complete RunDetailsPanel implementation)
-};
-
 const CreateRouteMain = ({ loadedRoute }) => {
   const [route, setRoute] = useState([]);
   const [runDetails, setRunDetails] = useState(null);
+  const [heartRateDetails, setHeartRateDetails] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [mapCenter, setMapCenter] = useState([40.7128, -74.0060]); // Default to NYC, will be updated with user location
+  const [mapCenter, setMapCenter] = useState([40.7128, -74.0060]); // Default to NYC
   const [shouldCenter, setShouldCenter] = useState(true); // Add this line
   const [isSearching, setIsSearching] = useState(false);
   const [showSaveModal, setShowSaveModal] = useState(false);
@@ -62,6 +47,12 @@ const CreateRouteMain = ({ loadedRoute }) => {
   // Add clickedPoints state here
   const [clickedPoints, setClickedPoints] = useState([]);
 
+  console.log('🔧 CreateRouteMain state check:', {
+    searchQuery: { type: typeof searchQuery, value: searchQuery },
+    setSearchQuery: { type: typeof setSearchQuery, exists: !!setSearchQuery },
+    isSearching: { type: typeof isSearching, value: isSearching },
+    setIsSearching: { type: typeof setIsSearching, exists: !!setIsSearching }
+  });
   // Fetch existing route names when component mounts
   useEffect(() => {
     const fetchExistingRoutes = async () => {
@@ -338,167 +329,125 @@ const CreateRouteMain = ({ loadedRoute }) => {
         }
       );
     }
-  }, []);
+  }, []); // Correct placement of the dependency array
+  
 
-  // Function to search for locations using Nominatim API
-  const searchLocation = async (query) => {
-    if (!query.trim()) return;
-    
-    setIsSearching(true);
-    try {
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`
-      );
-      const data = await response.json();
+    // Function to search for locations using Nominatim API
+    const searchLocation = async (query) => {
+      if (!query.trim()) return;
       
-      if (data && data.length > 0) {
-        const lat = parseFloat(data[0].lat);
-        const lon = parseFloat(data[0].lon);
-        setMapCenter([lat, lon]);
-        setShouldCenter(true); // Trigger centering for search
-      } else {
-        alert('Location not found. Please try a different search term.');
+      setIsSearching(true);
+      try {
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`
+        );
+        const data = await response.json();
+        
+        if (data && data.length > 0) {
+          const lat = parseFloat(data[0].lat);
+          const lon = parseFloat(data[0].lon);
+          setMapCenter([lat, lon]);
+          setShouldCenter(true); // Trigger centering for search
+        } else {
+          alert('Location not found. Please try a different search term.');
+        }
+      } catch (error) {
+        console.error('Search error:', error);
+        alert('Search failed. Please try again.');
+      } finally {
+        setIsSearching(false);
       }
-    } catch (error) {
-      console.error('Search error:', error);
-      alert('Search failed. Please try again.');
-    } finally {
-      setIsSearching(false);
-    }
-  };
+    };
 
-  const handleSearchSubmit = (e) => {
-    e.preventDefault();
-    searchLocation(searchQuery);
-  };
-
-  const handleSearchKeyPress = (e) => {
-    if (e.key === 'Enter') {
+    const handleSearchSubmit = (e) => {
       e.preventDefault();
       searchLocation(searchQuery);
-    }
-  };
+    };
 
-  return (
-    <div className="min-h-screen bg-gray-50 pb-20">
-      {/* Main Content */}
-      <div className="flex p-4 gap-4">
-        {/* Left Panel - Map and Data Visualization */}
-        <div className="flex-1 space-y-4">
+    const handleSearchKeyPress = (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        searchLocation(searchQuery);
+      }
+    };
+
+    return (
+      <div className="min-h-screen bg-gray-50 pb-20">
+        {/* Main Content */}
+        <div className="flex p-4 gap-4">
+          {/* Left Panel - Map and Data Visualization */}
+          <div className="flex-1 space-y-4">
           <div className="bg-white rounded-lg shadow-lg h-[80vh] overflow-hidden relative">
-            <div className="absolute top-4 left-4 z-[1000]">
-              <div className="bg-white bg-opacity-90 rounded-lg shadow-lg px-4 py-3 mb-4 w-fit">
-                <h1 className="text-2xl font-bold text-gray-900">Create Your Custom Route</h1>
-                <p className="text-sm text-gray-600 mt-1">Click on map to add points</p>
-              </div>
-              <form onSubmit={handleSearchSubmit} className="flex space-x-2">
-                <div className="flex-1 relative">
-                  <input
-                    type="text"
-                    placeholder="Search for a location..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    onKeyPress={handleSearchKeyPress}
-                    className="w-full pl-10 pr-4 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent shadow-sm"
-                    disabled={isSearching}
-                  />
-                  <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
-                  {isSearching && (
-                    <div className="absolute right-3 top-2.5">
-                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-orange-500"></div>
-                    </div>
-                  )}
-                </div>
-                <button 
-                  type="submit"
-                  disabled={isSearching || !searchQuery.trim()}
-                  className="bg-orange-500 hover:bg-orange-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg flex items-center space-x-1 shadow-sm transition-colors"
-                >
-                  <Search className="w-4 h-4" />
-                </button>
-                <button 
-                  type="button"
-                  onClick={() => navigator.geolocation?.getCurrentPosition(
-                    (position) => {
-                      setMapCenter([position.coords.latitude, position.coords.longitude]);
-                      setShouldCenter(true); // Trigger centering for geolocation
-                    },
-                    (error) => {
-                      console.error('Geolocation error:', error);
-                      alert('Unable to get your location. Please search for a location instead.');
-                    }
-                  )}
-                  className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg shadow-sm transition-colors"
-                  title="Use current location"
-                >
-                  <MapPin className="w-4 h-4" />
-                </button>
-              </form>
+              <DrawableMap 
+                route={route} 
+                setRoute={setRoute} 
+                mapCenter={mapCenter}
+                setMapCenter={setMapCenter}
+                shouldCenter={shouldCenter}
+                setShouldCenter={setShouldCenter}
+                runDetails={runDetails}
+                saveRoute={saveRoute}
+                clickedPoints={clickedPoints}
+                setClickedPoints={setClickedPoints}
+                searchQuery={searchQuery || ''}
+                setSearchQuery={setSearchQuery || (() => {})}
+                isSearching={isSearching || false}
+                setIsSearching={setIsSearching || (() => {})}
+              />
             </div>
-            
-            <DrawableMap 
-              route={route} 
-              setRoute={setRoute} 
-              mapCenter={mapCenter}
-              setMapCenter={setMapCenter}
-              shouldCenter={shouldCenter}
-              setShouldCenter={setShouldCenter}
+            <div className="bg-white rounded-lg shadow-lg p-4">
+            <DataVisualization 
+              route={route}
               runDetails={runDetails}
-              saveRoute={saveRoute}
-              clickedPoints={clickedPoints}
-              setClickedPoints={setClickedPoints}
+              heartRateDetails={heartRateDetails} 
             />
           </div>
-          
-          {/* Data Visualization - now inside left panel */}
-          <div className="bg-white rounded-lg shadow-lg">
-            <DataVisualization route={route} runDetails={runDetails} />
+            </div>
+          {/* Right Panel - Run Details */}
+          <div className="w-96">
+            <div className="bg-white rounded-lg shadow-lg relative z-[1001]">
+              <RunDetailsPanel 
+                route={loadedRoute}
+                routeCoordinates={route}
+                onRunDetailsChange={setRunDetails}
+                saveRoute={handleSaveClick}
+                onHeartRateChange={setHeartRateDetails} 
+              />
+            </div>
           </div>
         </div>
 
-        {/* Right Panel - Run Details */}
-        <div className="w-96">
-          <div className="bg-white rounded-lg shadow-lg relative z-[1001]">
-            <RunDetailsPanel 
-              route={loadedRoute}
-              routeCoordinates={route}
-              onRunDetailsChange={setRunDetails}
-              saveRoute={handleSaveClick}
-            />
+        {/* Footer */}
+        <footer className="bg-white border-t border-gray-200 py-4 px-6 mt-8">
+          <div className="max-w-7xl mx-auto flex items-center justify-between">
+            <div className="text-sm text-gray-500">
+              © 2025 . All rights reserved.
+            </div>
+            <div className="flex space-x-6">
+              <a href="#" className="text-sm text-gray-500 hover:text-gray-700">Terms of Service</a>
+             
+            </div>
           </div>
-        </div>
+        </footer>
+        
+        <SaveRouteModal 
+          isOpen={showSaveModal}
+          onClose={() => setShowSaveModal(false)}
+          onSave={saveRoute}
+          existingNames={existingRouteNames}
+          defaultName={defaultRouteName}
+        />
+        
+        <NotificationModal
+          isOpen={showSaveNotification}
+          onClose={() => setShowSaveNotification(false)}
+          type="success"
+          title="Route Saved"
+          message="Your route has been saved successfully!"
+        />
       </div>
+    );
 
-      {/* Footer */}
-      <footer className="bg-white border-t border-gray-200 py-4 px-6 mt-8">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="text-sm text-gray-500">
-            © 2026 FakeMyRun. All rights reserved.
-          </div>
-          <div className="flex space-x-6">
-            <a href="#" className="text-sm text-gray-500 hover:text-gray-700">Terms of Service</a>
-            <a href="#" className="text-sm text-gray-500 hover:text-gray-700">How To Upload</a>
-          </div>
-        </div>
-      </footer>
-      
-      <SaveRouteModal 
-        isOpen={showSaveModal}
-        onClose={() => setShowSaveModal(false)}
-        onSave={saveRoute}
-        existingNames={existingRouteNames}
-        defaultName={defaultRouteName}
-      />
-      
-      <NotificationModal
-        isOpen={showSaveNotification}
-        onClose={() => setShowSaveNotification(false)}
-        type="success"
-        title="Route Saved"
-        message="Your route has been saved successfully!"
-      />
-    </div>
-  );
 };
 
 export default CreateRouteMain;
