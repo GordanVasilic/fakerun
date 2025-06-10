@@ -31,7 +31,7 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
 
-const CreateRouteMain = ({ loadedRoute }) => {
+const CreateRouteMain = ({ loadedRoute, distanceUnit, setDistanceUnit }) => {
   const [route, setRoute] = useState([]);
   const [runDetails, setRunDetails] = useState(null);
   const [heartRateDetails, setHeartRateDetails] = useState(null);
@@ -109,7 +109,7 @@ const CreateRouteMain = ({ loadedRoute }) => {
           route_name: routeName,
           distance: runDetails.distance,
           duration: runDetails.duration,
-          pace: runDetails.avgPace ? String(runDetails.avgPace) : "6:00",
+          pace: runDetails.pace ? String(runDetails.pace) : "6:00",
           calories: runDetails.calories || Math.round(runDetails.distance * 70),
           elevation_gain: runDetails.elevationGain || 0,
           activity_type: runDetails.activityType || 'run',
@@ -117,10 +117,18 @@ const CreateRouteMain = ({ loadedRoute }) => {
           date: runDetails.date || new Date().toISOString().split('T')[0],
           start_time: runDetails.startTime || '08:00',
           description: runDetails.description || '',
-          // Add heart rate data
+          // Heart rate data
           heart_rate_enabled: runDetails.heartRateEnabled || false,
           avg_heart_rate: runDetails.avgHeartRate || 140,
-          pace_unit: runDetails.paceUnit || 'min/km',
+          heart_rate_variability: runDetails.heartRateVariability || 10,
+          // Distance unit
+          distance_unit: runDetails.distanceUnit || distanceUnit || 'km',
+          // Pace unit (dynamic based on distance unit)
+          pace_unit: `min/${runDetails.distanceUnit || distanceUnit || 'km'}`,
+          // Detailed data
+          km_paces: runDetails.kmPaces || {},
+          km_heart_rates: runDetails.kmHeartRates || {},
+          km_elevation_changes: runDetails.kmElevationChanges || {},
           elevation_profile: runDetails.elevationProfile || [],
           original_elevation_data: runDetails.originalElevationData || null
         };
@@ -147,22 +155,29 @@ const CreateRouteMain = ({ loadedRoute }) => {
 
         finalRunDetails = {
           route_name: routeName,
-          distance: totalDistance || 0,
-          duration: (totalDistance * 6 * 60) || 0,
-          pace: "6:00",
-          calories: Math.round(totalDistance * 70) || 0,
-          elevation_gain: 0,
-          activity_type: 'run',
-          name: 'Morning Run',
-          date: new Date().toISOString().split('T')[0],
-          start_time: '08:00',
-          description: '',
-          // Add default heart rate data
-          heart_rate_enabled: false,
-          avg_heart_rate: 140,
-          pace_unit: 'min/km',
-          elevation_profile: [],
-          original_elevation_data: null
+  distance: totalDistance || 0,
+  duration: (totalDistance * 6 * 60) || 0,
+  pace: "6:00",
+  calories: Math.round(totalDistance * 70) || 0,
+  elevation_gain: 0,
+  activity_type: 'run',
+  name: 'Morning Run',
+  date: new Date().toISOString().split('T')[0],
+  start_time: '08:00',
+  description: '',
+  // Heart rate data
+  heart_rate_enabled: false,
+  avg_heart_rate: 140,
+  heart_rate_variability: 10,
+  // Distance unit
+  distance_unit: distanceUnit || 'km',
+  pace_unit: `min/${distanceUnit || 'km'}`,
+  // Empty detailed data
+  km_paces: {},
+  km_heart_rates: {},
+  km_elevation_changes: {},
+  elevation_profile: [],
+  original_elevation_data: null
         };
       }
 
@@ -399,20 +414,22 @@ const CreateRouteMain = ({ loadedRoute }) => {
             <DataVisualization 
               route={route}
               runDetails={runDetails}
-              heartRateDetails={heartRateDetails} 
+              heartRateDetails={heartRateDetails}
+              distanceUnit={distanceUnit}
             />
           </div>
             </div>
           {/* Right Panel - Run Details */}
           <div className="w-96">
             <div className="bg-white rounded-lg shadow-lg relative z-[1001]">
-              <RunDetailsPanel 
-                route={loadedRoute}
-                routeCoordinates={route}
-                onRunDetailsChange={setRunDetails}
-                saveRoute={handleSaveClick}
-                onHeartRateChange={setHeartRateDetails} 
-              />
+            <RunDetailsPanel 
+              route={loadedRoute}
+              routeCoordinates={route}
+              onRunDetailsChange={setRunDetails}
+              saveRoute={handleSaveClick}
+              onHeartRateChange={setHeartRateDetails}
+              distanceUnit={distanceUnit}
+            />
             </div>
           </div>
         </div>

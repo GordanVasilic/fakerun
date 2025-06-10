@@ -69,6 +69,13 @@ class RunDetails(BaseModel):
     date: Optional[str] = None
     start_time: Optional[str] = '08:00'
     description: Optional[str] = ''
+    distance_unit: Optional[str] = 'km'
+    heart_rate_enabled: Optional[bool] = False
+    avg_heart_rate: Optional[int] = None
+    heart_rate_variability: Optional[float] = None
+    km_paces: Optional[List[str]] = []
+    km_heart_rates: Optional[List[int]] = []
+    km_elevation_changes: Optional[List[float]] = []
 
 class UserCreate(BaseModel):
     email: EmailStr

@@ -1,15 +1,25 @@
 import React, { useMemo } from 'react';
 import { Line } from 'react-chartjs-2';
+import { kmToMiles, kmhToMph, formatDistance, formatPace } from '../../utils/unitConversions';
 
-const DataVisualization = ({ route, runDetails, heartRateDetails }) => {
+const DataVisualization = ({ route, runDetails, heartRateDetails, distanceUnit = 'km'  }) => {
   // Default values if runDetails is not yet available
   const defaultRunDetails = {
     pace: 6.0, // Changed from avgPace to pace
     elevationGain: 50,
     distance: 5.0,
-    duration: 1800
+    duration: 1800,
+    activityType: 'Run', // Add missing activityType
+    paceVariation: 0 // Add missing paceVariation
   };
-  
+  // Convert distance values based on unit preference
+  const convertDistance = (distance) => {
+    return distanceUnit === 'miles' ? kmToMiles(distance) : distance;
+  };
+   // Convert speed values based on unit preference
+   const convertSpeed = (speed) => {
+    return distanceUnit === 'miles' ? kmhToMph(speed) : speed;
+  };
   const details = runDetails || defaultRunDetails;
       // Helper function to convert pace to speed
   const paceToSpeed = (pace) => {
@@ -23,8 +33,10 @@ const generatePaceData = () => {
     return {
       labels: ['0'],
       datasets: [{
-        label: runDetails.activityType === 'Bike' ? 'Speed (km/h)' : 'Pace (min/km)',
-        data: [runDetails.activityType === 'Bike' ? paceToSpeed(runDetails.pace) : runDetails.pace],
+        label: details.activityType === 'Bike' 
+          ? `Speed (${distanceUnit === 'miles' ? 'mph' : 'km/h'})` 
+          : `Pace (min/${distanceUnit === 'miles' ? 'mi' : 'km'})`,
+        data: [details.activityType === 'Bike' ? paceToSpeed(details.pace) : details.pace],
         borderColor: '#F97316',
         backgroundColor: 'rgba(249, 115, 22, 0.1)',
         tension: 0.4,
@@ -313,8 +325,8 @@ const paceChartOptions = {
         display: false,
       },
       title: {
-        display: true,
-        text: 'Distance (km)'
+       display: true,
+      text: `Distance (${distanceUnit === 'miles' ? 'mi' : 'km'})`
       }
     },
     y: {
@@ -323,7 +335,9 @@ const paceChartOptions = {
       },
       title: {
         display: true,
-        text: details.activityType === 'Bike' ? 'Speed (km/h)' : 'Pace (min/km)'
+        text: details.activityType === 'Bike' 
+        ? `Speed (${distanceUnit === 'miles' ? 'mph' : 'km/h'})` 
+        : `Pace (min/${distanceUnit === 'miles' ? 'mi' : 'km'})`
       },
       beginAtZero: details.activityType === 'Bike',
       reverse: details.activityType !== 'Bike',
@@ -363,7 +377,11 @@ const paceChartOptions = {
       intersect: false,
       callbacks: {
         label: function(context) {
-          return `Pace: ${context.parsed.y.toFixed(1)} min/km`;
+          if (details.activityType === 'Bike') {
+            return `Speed: ${context.parsed.y.toFixed(1)} ${distanceUnit === 'miles' ? 'mph' : 'km/h'}`;
+          } else {
+            return `Pace: ${context.parsed.y.toFixed(1)} min/${distanceUnit === 'miles' ? 'mi' : 'km'}`;
+          }
         }
       }
     },
@@ -380,7 +398,7 @@ const elevationChartOptions = {
       },
       title: {
         display: true,
-        text: 'Distance (km)'
+       text: `Distance (${distanceUnit === 'miles' ? 'mi' : 'km'})`
       }
     },
     y: {

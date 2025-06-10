@@ -291,7 +291,7 @@ export const RegisterModal = ({ isOpen, onClose, onSwitchToLogin }) => {
   );
 };
 
-export const Header = ({ currentPage, onNavigate }) => {
+export const Header = ({ currentPage, onNavigate, distanceUnit, setDistanceUnit  }) => {
   const [user, setUser] = useState(authService.getUser());
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showRegisterModal, setShowRegisterModal] = useState(false);
@@ -319,7 +319,7 @@ export const Header = ({ currentPage, onNavigate }) => {
       <header className="bg-white border-b border-gray-200 px-6 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center space-x-8">
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-8">
               <div className="w-8 h-8 bg-orange-500 rounded flex items-center justify-center">
                 <Play className="w-5 h-5 text-white" />
               </div>
@@ -362,6 +362,7 @@ export const Header = ({ currentPage, onNavigate }) => {
             </nav>
           </div>
           <div className="flex items-center space-x-4">
+          <UnitToggle distanceUnit={distanceUnit} setDistanceUnit={setDistanceUnit} />
             {user ? (
               <div className="relative">
                 <button
@@ -422,6 +423,22 @@ export const Header = ({ currentPage, onNavigate }) => {
   );
 };
 
+// Add this component after the Header component (around line 420)
+export const UnitToggle = ({ distanceUnit, setDistanceUnit }) => {
+  return (
+    <div className="flex items-center space-x-2">
+      <span className="text-sm text-gray-600">Units:</span>
+      <select
+        value={distanceUnit}
+        onChange={(e) => setDistanceUnit(e.target.value)}
+        className="text-sm border border-gray-300 rounded px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+      >
+        <option value="km">Kilometers</option>
+        <option value="miles">Miles</option>
+      </select>
+    </div>
+  );
+};
 // MapTypeSelector is now imported from components/Map/MapTypeSelector
 
 
@@ -538,7 +555,7 @@ export const SaveRouteModal = ({ isOpen, onClose, onSave, existingNames, default
   );
 };
 
-export const AppMain = () => {
+export const AppMain = ({ distanceUnit, setDistanceUnit }) => {
   const [currentPage, setCurrentPage] = useState('create');
   const [loadedRoute, setLoadedRoute] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(authService.isAuthenticated());
@@ -559,12 +576,24 @@ export const AppMain = () => {
 
   return (
     <div className="App">
-      <Header currentPage={currentPage} onNavigate={handleNavigation} />
+      <Header 
+        currentPage={currentPage} 
+        onNavigate={handleNavigation}
+        distanceUnit={distanceUnit}
+        setDistanceUnit={setDistanceUnit}
+      />
       {currentPage === 'create' ? (
-        <CreateRouteMain loadedRoute={loadedRoute} />
+       <CreateRouteMain 
+       loadedRoute={loadedRoute} 
+       distanceUnit={distanceUnit}
+       setDistanceUnit={setDistanceUnit}
+     />
       ) : currentPage === 'saved' ? (
         isAuthenticated ? (
-          <SavedRoutesPage onBackToCreate={handleBackToCreate} />
+          <SavedRoutesPage 
+          onBackToCreate={handleBackToCreate}
+          distanceUnit={distanceUnit}
+        />
         ) : (
           <div className="min-h-screen bg-gray-50 flex items-center justify-center">
             <div className="text-center">

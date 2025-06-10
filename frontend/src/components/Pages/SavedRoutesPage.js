@@ -4,14 +4,16 @@ import { authService } from '../../services/auth';
 import RouteThumbnail from '../UI/RouteThumbnail';
 import NotificationModal from '../Modals/NotificationModal';
 import DeleteConfirmModal from '../Modals/DeleteConfirmModal';
+import { formatDistance } from '../../utils/unitConversions';
 
-export const SavedRoutesPage = ({ onBackToCreate }) => {
+export const SavedRoutesPage = ({ onBackToCreate, distanceUnit = 'km'}) => {
   const [savedRoutes, setSavedRoutes] = useState([]);
   const [filteredRoutes, setFilteredRoutes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, route: null });
-  
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [suggestions, setSuggestions] = useState([]);
   // Search and filter states
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState({
@@ -173,6 +175,41 @@ export const SavedRoutesPage = ({ onBackToCreate }) => {
     setShowPaceFilter(false);
   };
 
+  const handleSearchChange = (e) => {
+    const value = e.target.value;
+    setSearchTerm(value);
+    
+    // Generate suggestions based on existing route names
+    if (value.trim()) {
+      const routeNames = savedRoutes.map(route => route.name);
+      const filteredSuggestions = routeNames.filter(name => 
+        name.toLowerCase().includes(value.toLowerCase()) && 
+        name.toLowerCase() !== value.toLowerCase()
+      );
+      setSuggestions([...new Set(filteredSuggestions)].slice(0, 5)); // Remove duplicates and limit to 5
+      setShowSuggestions(filteredSuggestions.length > 0);
+    } else {
+      setSuggestions([]);
+      setShowSuggestions(false);
+    }
+  };
+  const handleSearchFocus = () => {
+    if (searchTerm.trim() && suggestions.length > 0) {
+      setShowSuggestions(true);
+    }
+  };
+  
+  const handleSearchBlur = () => {
+    // Delay hiding suggestions to allow for clicks
+    setTimeout(() => {
+      setShowSuggestions(false);
+    }, 200);
+  };
+  
+  const handleSuggestionClick = (suggestion) => {
+    setSearchTerm(suggestion);
+    setShowSuggestions(false);
+  };
   const deleteRoute = async (routeId) => {
     try {
       const response = await fetch(`http://localhost:8000/api/routes/${routeId}`, {
@@ -336,7 +373,9 @@ export const SavedRoutesPage = ({ onBackToCreate }) => {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {/* Distance Filter */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Distance (km)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Distance ({distanceUnit})
+                </label>
                   <div className="flex space-x-2">
                     <input
                       type="number"
@@ -512,7 +551,9 @@ export const SavedRoutesPage = ({ onBackToCreate }) => {
                     <div className="grid grid-cols-[auto_auto_1fr] gap-x-8 gap-y-3 items-center">
                       {/* Row 1 - Distance */}
                       <div className="text-sm text-gray-500">Distance</div>
-                      <div className="font-medium">{route.run_details?.distance || 'N/A'} km</div>
+                      <div className="font-medium">
+                        {formatDistance(route.run_details?.distance || 0, distanceUnit)}
+                      </div>
                       <div className="row-span-4 flex justify-center">
                         <RouteThumbnail coordinates={route.coordinates} width={180} height={135} />
                       </div>

@@ -36,7 +36,7 @@ const baseXAxisConfig = {
   },
   title: {
     display: true,
-    text: 'Distance (km)'
+    text:  distanceUnit === 'miles' ? 'Mile' : 'Kilometer'
   },
   ticks: {
     maxTicksLimit: 10,
@@ -55,24 +55,23 @@ const baseYAxisConfig = {
 };
 
 // Pace chart configuration factory
-export const createPaceChartOptions = (paceData) => ({
+export const createPaceChartOptions = (paceData, distanceUnit = 'km') => ({
   ...baseChartConfig,
   scales: {
-    x: baseXAxisConfig,
-    y: {
-      ...baseYAxisConfig,
+    x: {
+      ...baseXAxisConfig,
       title: {
         display: true,
-        text: 'Pace (min/km)'
-      },
-      beginAtZero: false,
-      reverse: true, // Invert y-axis: faster pace (lower values) at top
-      min: Math.max(2, Math.min(...paceData.datasets[0].data) - 0.5),
-      max: Math.max(...paceData.datasets[0].data) + 0.5,
-      ticks: {
-        stepSize: 0.5,
+        text: `Distance (${distanceUnit === 'miles' ? 'mi' : 'km'})`
       }
     },
+    y: {
+      // ... existing code ...
+      title: {
+        display: true,
+        text: `Pace (min/${distanceUnit === 'miles' ? 'mi' : 'km'})`
+      }
+    }
   },
   plugins: {
     ...baseChartConfig.plugins,
@@ -80,7 +79,7 @@ export const createPaceChartOptions = (paceData) => ({
       ...baseChartConfig.plugins.tooltip,
       callbacks: {
         label: function(context) {
-          return `Pace: ${context.parsed.y.toFixed(1)} min/km`;
+          return `Pace: ${context.parsed.y.toFixed(1)} min/${distanceUnit === 'miles' ? 'mi' : 'km'}`;
         }
       }
     },
@@ -122,7 +121,7 @@ export const heartRateChartOptions = {
       ...baseXAxisConfig,
       title: {
         display: true,
-        text: 'Kilometer'
+        text: distanceUnit === 'miles' ? 'Mile' : 'Kilometer'
       }
     },
     y: {
@@ -157,4 +156,24 @@ export const createDatasetConfig = (type, data, label) => ({
   backgroundColor: CHART_COLORS[type].background,
   tension: 0.4,
   fill: true,
+});
+
+// Update chart labels to be dynamic
+export const getChartLabels = (distanceUnit) => ({
+  distance: `Distance (${distanceUnit})`,
+  pace: `Pace (min/${distanceUnit})`,
+  speed: `Speed (${distanceUnit === 'km' ? 'km/h' : 'mph'})`
+});
+
+// Update tooltip callbacks
+export const getTooltipCallbacks = (distanceUnit, activityType) => ({
+  pace: function(context) {
+    const pace = context.parsed.y.toFixed(1);
+    return `Pace: ${pace} min/${distanceUnit}`;
+  },
+  speed: function(context) {
+    const speed = context.parsed.y.toFixed(1);
+    const unit = distanceUnit === 'km' ? 'km/h' : 'mph';
+    return `Speed: ${speed} ${unit}`;
+  }
 });

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { formatDistance, formatPace, kmToMiles } from '../../utils/unitConversions';
 import { Save, MapPin, Clock, TrendingUp, Activity, Heart } from 'lucide-react';
 import { 
   getOpenElevation, 
@@ -24,7 +25,8 @@ const RunDetailsPanel = ({
   routeCoordinates,
   onRunDetailsChange,
   onHeartRateChange, // Add this new prop
-  saveRoute
+  saveRoute,
+  distanceUnit = 'km'
 }) => {
   // Seeded random number generator for consistent pace calculations
   const seededRandom = (seed) => {
@@ -177,6 +179,8 @@ const RunDetailsPanel = ({
       setRunDetails(prev => ({
         ...prev,
         ...route.run_details,
+        // Ensure duration is a valid number
+        duration: Number(route.run_details.duration) || 0,
         // Handle heart rate data if it exists
         heartRateEnabled: route.run_details.avgHeartRate ? true : prev.heartRateEnabled,
         avgHeartRate: route.run_details.avgHeartRate || prev.avgHeartRate
@@ -188,24 +192,36 @@ const RunDetailsPanel = ({
   useEffect(() => {
     if (onRunDetailsChange) {
       // Create a copy without heart rate data for pace calculations
-      const paceRelevantDetails = {
+      const completeDetails = {
         ...runDetails,
-        // Remove heart rate fields that shouldn't affect pace
-        avgHeartRate: undefined,
-        heartRateVariability: undefined,
-        heartRateEnabled: undefined
+        heartRateEnabled: runDetails.heartRateEnabled,
+      avgHeartRate: runDetails.avgHeartRate,
+      heartRateVariability: runDetails.heartRateVariability,
+      // Include distance unit
+      distanceUnit: distanceUnit,
+      // Include km-specific data
+      kmPaces: kmPaces,
+      kmHeartRates: kmHeartRates,
+      kmElevationChanges: kmElevationChanges
       };
-      onRunDetailsChange(paceRelevantDetails);
+      onRunDetailsChange(completeDetails);
     }
   }, [
     // Only include pace-relevant dependencies
     runDetails.name,
-    runDetails.date,
-    runDetails.startTime,
-    runDetails.activityType,
-    runDetails.distance,
-    runDetails.pace,
-    runDetails.paceVariation
+  runDetails.date,
+  runDetails.startTime,
+  runDetails.activityType,
+  runDetails.distance,
+  runDetails.pace,
+  runDetails.paceVariation,
+  runDetails.heartRateEnabled,
+  runDetails.avgHeartRate,
+  runDetails.heartRateVariability,
+  distanceUnit,
+  kmPaces,
+  kmHeartRates,
+  kmElevationChanges
   ]);
 
   // Function to handle GPX creation
@@ -324,7 +340,7 @@ const RunDetailsPanel = ({
         }
       
         // Calculate duration based on pace and distance
-        const duration = totalDistance * runDetails.pace * 60; // Convert minutes to seconds
+        const duration = Math.round(totalDistance * runDetails.pace * 60); // Add Math.round() // Convert minutes to seconds
       
         setRunDetails(prev => ({
           ...prev,
@@ -341,13 +357,20 @@ const RunDetailsPanel = ({
     calculateRouteStats();
   }, [routeCoordinates, runDetails.pace]);
 
-  // Update duration when pace or distance changes
+  // Handle loaded route details
   useEffect(() => {
-    if (runDetails.distance > 0) {
-      const newDuration = runDetails.distance * runDetails.pace * 60; // Convert minutes to seconds
-      setRunDetails(prev => ({ ...prev, duration: newDuration }));
+    if (route?.run_details) {
+      setRunDetails(prev => ({
+        ...prev,
+        ...route.run_details,
+        // Ensure duration is always an integer
+        duration: Math.round(route.run_details.duration || 0),
+        // Handle heart rate data if it exists
+        heartRateEnabled: route.run_details.avgHeartRate ? true : prev.heartRateEnabled,
+        avgHeartRate: route.run_details.avgHeartRate || prev.avgHeartRate
+      }));
     }
-  }, [runDetails.pace, runDetails.distance]);
+  }, [route?.run_details]);
 
   // Function to calculate heart rate per kilometer based on elevation and other factors
   const calculateKmHeartRates = (avgHeartRate, variability, kmElevationChanges) => {
@@ -473,7 +496,20 @@ const RunDetailsPanel = ({
 
       // Helper function to get appropriate label based on activity type
       const getPaceSpeedLabel = (activityType, pace) => {
-        return activityType === 'Bike' ? formatSpeed(pace) : formatPace(pace);
+        // Convert pace to number if it's a string
+        let numericPace = typeof pace === 'string' ? parseFloat(pace) : pace;
+        if (isNaN(numericPace) || numericPace <= 0) {
+          return activityType === 'Bike' ? '0.0 km/h' : '0:00 min/km';
+        }
+        
+        if (activityType === 'Bike') {
+          const speed = paceToSpeed(numericPace);
+          const displaySpeed = distanceUnit === 'miles' ? speed * 0.621371 : speed;
+          return `${displaySpeed.toFixed(1)} ${distanceUnit === 'km' ? 'km/h' : 'mph'}`;
+        } else {
+          const displayPace = distanceUnit === 'miles' ? numericPace * 1.60934 : numericPace;
+          return `${displayPace.toFixed(1)} min/${distanceUnit === 'km' ? 'km' : 'mi'}`;
+        }
       };
 
       // Helper function to get appropriate unit label
@@ -566,8 +602,8 @@ const RunDetailsPanel = ({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
             </div>
-            <div className="text-2xl font-bold text-orange-600">
-              {runDetails.distance.toFixed(2)} km
+            <div className="text-2xl font-bold text-gray-900">
+              {formatDistance(runDetails.distance, distanceUnit)}
             </div>
             <div className="text-sm text-gray-600">Distance</div>
           </div>
@@ -580,7 +616,11 @@ const RunDetailsPanel = ({
               </svg>
             </div>
             <div className="text-2xl font-bold text-orange-600">
-              {Math.floor(runDetails.duration / 3600)}:{Math.floor((runDetails.duration % 3600) / 60).toString().padStart(2, '0')}:{Math.floor(runDetails.duration % 60).toString().padStart(2, '0')}
+              {runDetails.duration && !isNaN(runDetails.duration) ? (
+                `${Math.floor(runDetails.duration / 3600)}:${Math.floor((runDetails.duration % 3600) / 60).toString().padStart(2, '0')}:${Math.floor(runDetails.duration % 60).toString().padStart(2, '0')}`
+              ) : (
+                '0:00:00'
+              )}
             </div>
             <div className="text-sm text-gray-600">Duration</div>
           </div>
@@ -645,13 +685,13 @@ const RunDetailsPanel = ({
               <div className="flex justify-between text-xs text-gray-500 mt-1">
                 {runDetails.activityType === 'Bike' ? (
                   <>
-                    <span>7 km/h</span>
-                    <span>90 km/h</span>
+                    <span>{distanceUnit === 'km' ? '7 km/h' : '4.3 mph'}</span>
+                    <span>{distanceUnit === 'km' ? '90 km/h' : '56 mph'}</span>
                   </>
                 ) : (
                   <>
-                    <span>1:00 min/km</span>
-                    <span>12:00 min/km</span>
+                   <span>1:00 min/{distanceUnit === 'km' ? 'km' : 'mi'}</span>
+                   <span>12:00 min/{distanceUnit === 'km' ? 'km' : 'mi'}</span>
                   </>
                 )}
               </div>
@@ -676,12 +716,10 @@ const RunDetailsPanel = ({
                 <span>80% (High variation)</span>
               </div>
               <div className="text-xs text-gray-500 mt-1">
-                {runDetails.paceVariation === 0 ? 
-                  `Constant ${runDetails.activityType === 'Bike' ? 'speed' : 'pace'} throughout the ${runDetails.activityType === 'Bike' ? 'ride' : 'run'} (most efficient)` :
-                  runDetails.activityType === 'Bike' ?
-                    `Natural speed variation of ±${(paceToSpeed(runDetails.pace) * runDetails.paceVariation / 100).toFixed(1)} km/h` :
-                    `Natural pace variation of ±${Math.round(runDetails.pace * runDetails.paceVariation / 100 * 60)}s per km`
-                }
+              {runDetails.activityType === 'Bike' ?
+                `Natural speed variation of ±${(paceToSpeed(runDetails.pace) * runDetails.paceVariation / 100).toFixed(1)} ${distanceUnit === 'km' ? 'km/h' : 'mph'}` :
+                `Natural pace variation of ±${Math.round(runDetails.pace * runDetails.paceVariation / 100 * 60)}s per ${distanceUnit === 'km' ? 'km' : 'mi'}`
+              }
               </div>
             </div>
           </div>
@@ -759,13 +797,18 @@ const RunDetailsPanel = ({
         <div className="bg-white rounded-lg p-4 shadow-sm max-w-full overflow-hidden">
           <h3 className="text-lg font-semibold mb-4 text-gray-800 flex items-center">
             <span className="mr-2">📊</span>
-            {runDetails.activityType === 'Bike' ? 'Speed' : 'Pace'} per Kilometer
+            {runDetails.activityType === 'Bike' ? 'Speed' : 'Pace'} {distanceUnit === 'km' ? 'Kilometer' : 'Mile'}
           </h3>
           <div className="max-h-64 overflow-y-auto">
             {/* Header */}
             <div className="grid grid-cols-4 gap-2 text-sm font-semibold text-gray-600 mb-3 pb-2 border-b-2 border-gray-200 bg-gray-50 p-2 rounded-t">
-              <div className="text-center">KM</div>
-              <div className="text-center">{runDetails.activityType === 'Bike' ? 'Speed (km/h)' : 'Pace (min/km)'}</div>
+            <div className="text-center">{distanceUnit === 'km' ? 'KM' : 'Mile'}</div>
+            <div className="text-center">
+                {runDetails.activityType === 'Bike' 
+                  ? `Speed (${distanceUnit === 'km' ? 'km/h' : 'mph'})` 
+                  : `Pace (min/${distanceUnit})`
+                }
+              </div>
               <div className="text-center">Elevation</div>
               {runDetails.heartRateEnabled && <div className="text-center">Heart Rate</div>}
             </div>
