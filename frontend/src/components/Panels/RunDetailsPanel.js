@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Save, MapPin, Clock, TrendingUp, Activity, Heart } from 'lucide-react';
+import { Save, MapPin, Clock, TrendingUp, Activity, Heart, Download } from 'lucide-react'; // Added Download icon
 import { 
   getOpenElevation, 
   calculateElevationGain, 
@@ -52,6 +52,7 @@ const RunDetailsPanel = ({
 
   // State for GPX generation
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isExporting, setIsExporting] = useState(false); // State for export button
   const [error, setError] = useState('');
   // Effect to set appropriate default pace when activity type changes
   useEffect(() => {
@@ -223,35 +224,99 @@ const RunDetailsPanel = ({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          // Assuming generate-gpx might also be protected if it implies user-specific generation details
+           ...authService.getAuthHeaders(),
         },
         body: JSON.stringify({
           coordinates: routeCoordinates,
-          runDetails: runDetails,
-          kmPaces: kmPaces,
-          kmHeartRates: kmHeartRates
+          runDetails: runDetails, // This uses the panel's internal runDetails state
+          // kmPaces and kmHeartRates are part of the current runDetails state if this function is for NEW GPX generation
         }),
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to generate GPX');
+        throw new Error(errorData.detail || errorData.error || 'Failed to generate GPX');
       }
 
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.style.display = 'none';
-      a.href = url;
-      a.download = `${runDetails.name || 'route'}.gpx`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      // The /api/generate-gpx endpoint returns JSON with gpx_content
+      const data = await response.json();
+      if (data.gpx_content) {
+        downloadGpxContent(data.gpx_content, `${runDetails.name || 'custom_route'}.gpx`);
+      } else {
+        throw new Error('GPX content not found in response.');
+      }
+
     } catch (error) {
       console.error('Error generating GPX:', error);
       setError(error.message || 'Failed to generate GPX file');
+      alert(`Error generating GPX: ${error.message}`);
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  const downloadGpxContent = (gpxContent, fileName) => {
+    const blob = new Blob([gpxContent], { type: 'application/gpx+xml' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  };
+
+  const handleExportGpx = async () => {
+    if (!routeCoordinates || routeCoordinates.length < 2) {
+      alert('No route to export. Please create or load a route.');
+      return;
+    }
+
+    setIsExporting(true);
+    setError('');
+
+    try {
+      // Ensure runDetails used for export are current, especially name and description
+      const currentRunDetailsForExport = {
+        ...runDetails, // Uses the panel's current state
+        route_name: runDetails.name || 'Exported Route', // Ensure route_name is explicitly set
+        description: runDetails.description || 'Exported from FakeRun',
+      };
+
+
+      const response = await fetch('/api/generate-gpx', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+           ...authService.getAuthHeaders(), // Add auth headers
+        },
+        body: JSON.stringify({
+          coordinates: routeCoordinates, // These come from props, representing the current map route
+          runDetails: currentRunDetailsForExport,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || errorData.error || 'Failed to export GPX');
+      }
+
+      const data = await response.json();
+      if (data.gpx_content) {
+        downloadGpxContent(data.gpx_content, `${currentRunDetailsForExport.route_name}.gpx`);
+      } else {
+        throw new Error('GPX content not found in response for export.');
+      }
+
+    } catch (error) {
+      console.error('Error exporting GPX:', error);
+      setError(error.message || 'Failed to export GPX file');
+      alert(`Error exporting GPX: ${error.message}`);
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -959,14 +1024,30 @@ const RunDetailsPanel = ({
         {/* Download GPX Button */}
         <button 
           onClick={handleCreateRun}
-          disabled={isGenerating || routeCoordinates.length < 2}
-          className={`w-full font-semibold py-3 px-3 rounded-md transition-colors flex items-center justify-center ${
-            isGenerating || routeCoordinates.length < 2
+          disabled={isGenerating || !routeCoordinates || routeCoordinates.length < 2}
+          className={`w-full font-semibold py-3 px-3 rounded-md transition-colors flex items-center justify-center space-x-2 ${
+            isGenerating || !routeCoordinates || routeCoordinates.length < 2
               ? 'bg-gray-400 cursor-not-allowed text-white'
               : 'bg-orange-500 hover:bg-orange-600 text-white'
           }`}
         >
-          {isGenerating ? 'Generating GPX...' : 'Download GPX'}
+          {/* This button seems to be for generating a NEW GPX with variations, not simple export */}
+          <Activity className="w-4 h-4" />
+          <span>Generate Custom GPX</span>
+        </button>
+
+        {/* Export Existing Route as GPX Button */}
+        <button
+          onClick={handleExportGpx}
+          disabled={isExporting || !routeCoordinates || routeCoordinates.length < 2}
+          className={`w-full font-semibold py-3 px-3 rounded-md transition-colors flex items-center justify-center space-x-2 ${
+            isExporting || !routeCoordinates || routeCoordinates.length < 2
+              ? 'bg-gray-400 cursor-not-allowed text-white'
+              : 'bg-blue-500 hover:bg-blue-600 text-white'
+          }`}
+        >
+          <Download className="w-4 h-4" />
+          <span>Export Current Route GPX</span>
         </button>
       </div>
     </div>

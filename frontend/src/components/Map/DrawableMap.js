@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { debounce } from 'lodash'; // or implement your own debounce function
-import { MapContainer, TileLayer, Polyline, Marker, useMap, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, Polyline, Marker, useMap, useMapEvents, LatLngBounds } from 'react-leaflet';
 import { startIcon, endIcon, waypointIcon } from '../Map/mapIcons';
 import MapTypeSelector from './MapTypeSelector';
-import { Search, MapPin, X } from 'lucide-react';
+import { Search, MapPin, X, Plus } from 'lucide-react';
+import { authService } from '../../services/auth'; // Import authService
 
 const DrawableMap = (props) => {
   console.log('🔍 Raw props received:', props);
@@ -15,8 +16,9 @@ const DrawableMap = (props) => {
     setMapCenter, 
     shouldCenter, 
     setShouldCenter, 
-    runDetails, 
-    saveRoute,
+    runDetails, // This is the runDetails from the parent
+    // saveRoute, // saveRoute is likely passed to RunDetailsPanel, not directly used here for GPX upload
+    onGpxUploadSuccess, // New prop to notify parent of successful GPX upload with data
     clickedPoints,
     setClickedPoints,
     searchQuery = '', // Provide default values
@@ -647,17 +649,117 @@ const DrawableMap = (props) => {
   // Remove the entire search UI section (around lines 565-600)
   // Replace the search UI with just the map container
   
+  const fileInputRef = useRef(null);
+  const mapRef = useRef(null); // Ref to access map instance for fitBounds
+
+  const handleFileUploadButtonClick = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  };
+
+  const handleGpxFileUpload = async (event) => {
+    const file = event.target.files[0];
+    if (!file) {
+      return;
+    }
+
+    if (!file.name.toLowerCase().endsWith('.gpx')) {
+      alert('Invalid file type. Please upload a .gpx file.');
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''; // Reset file input
+      }
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const response = await fetch('/api/upload-gpx', { // Assuming proxy is set up or using relative URL
+        method: 'POST',
+        headers: {
+          ...authService.getAuthHeaders(), // Add auth token
+        },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || `Error uploading file: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+
+      if (data.coordinates && data.coordinates.length > 0) {
+        // Call the new prop function to update parent state
+        if (onGpxUploadSuccess) {
+          onGpxUploadSuccess({
+            coordinates: data.coordinates,
+            name: data.name || null, // Pass name if available
+          });
+        } else {
+          // Fallback if the prop isn't provided (though it should be)
+          // This updates local state but won't update RunDetailsPanel unless App.js handles it
+          setRouteCoordinates(data.coordinates);
+          setClickedPoints(data.coordinates);
+          if(props.setRoute) props.setRoute(data.coordinates); // Ensure route prop is updated if setRoute is available
+          console.warn("onGpxUploadSuccess prop not provided to DrawableMap. GPX name might not update in RunDetailsPanel.");
+        }
+
+        // Center map on the new route
+        if (mapRef.current && data.coordinates.length > 0) {
+          const bounds = new LatLngBounds(data.coordinates);
+          mapRef.current.fitBounds(bounds, { padding: [50, 50] });
+        }
+        alert('GPX route uploaded successfully!');
+      } else {
+        alert('Uploaded GPX file does not contain any coordinates or is invalid.');
+      }
+
+    } catch (error) {
+      console.error('GPX Upload Error:', error);
+      alert(`Failed to upload GPX file: ${error.message}`);
+    } finally {
+      // Reset the input value to allow selecting the same file again
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
   return (
     <div 
       className="relative w-full h-full"
       onClick={closeContextMenu} // Add this to close context menu on outside click
     >
+      {/* Hidden File Input */}
+      <input
+        type="file"
+        accept=".gpx"
+        ref={fileInputRef}
+        onChange={handleGpxFileUpload} // Updated to call the new handler
+        style={{ display: 'none' }}
+        aria-hidden="true"
+      />
+
+      {/* Upload GPX Button */}
+      <button
+        onClick={handleFileUploadButtonClick}
+        className="absolute top-4 right-4 z-[1000] bg-white hover:bg-gray-100 text-gray-700 font-semibold py-2 px-3 border border-gray-300 rounded-lg shadow-md flex items-center justify-center transition-colors duration-150"
+        title="Upload GPX File"
+      >
+        <Plus size={20} />
+      </button>
+
       <MapContainer
+        ref={mapRef} // Assign ref to MapContainer
         center={mapCenter}
         zoom={13}
         className="w-full h-full"
         whenCreated={(map) => {
           // Map initialization logic
+          // mapRef.current = map; // This is one way, but using the ref prop is cleaner
         }}
       >
         // Around line 580-582, replace the incorrect component references:

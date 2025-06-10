@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, status
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, EmailStr
@@ -56,6 +56,8 @@ class StatusCheck(BaseModel):
     message: str
 
 from typing import Optional
+import gpxpy
+import gpxpy.gpx
 
 class RunDetails(BaseModel):
     distance: float
@@ -186,6 +188,45 @@ async def get_status():
     except Exception as e:
         logger.error(f"Error fetching status checks: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error fetching status checks: {str(e)}")
+
+# GPX parsing function
+def parse_gpx_file(gpx_file_content: str) -> dict:
+    """
+    Parses GPX file content and extracts latitude and longitude from each track point,
+    as well as basic metadata (route name).
+
+    Args:
+        gpx_file_content: GPX file content as a string.
+
+    Returns:
+        A dictionary containing "coordinates" (list of [lat, lon] pairs)
+        and "name" (string, optional route name).
+        Returns {"coordinates": [], "name": None} if parsing fails or no points are found.
+    """
+    coordinates = []
+    route_name = None
+    try:
+        gpx = gpxpy.parse(gpx_file_content)
+
+        # Try to get route name from metadata
+        if gpx.metadata and gpx.metadata.name:
+            route_name = gpx.metadata.name
+        elif gpx.tracks:
+            # If not in metadata, try the first track's name
+            for track in gpx.tracks:
+                if track.name:
+                    route_name = track.name
+                    break
+
+        for track in gpx.tracks:
+            for segment in track.segments:
+                for point in segment.points:
+                    coordinates.append([point.latitude, point.longitude])
+    except Exception as e:
+        logger.error(f"Error parsing GPX file: {e}") # Use logger for errors
+        return {"coordinates": [], "name": None}
+
+    return {"coordinates": coordinates, "name": route_name}
 
 # GPX generation endpoint
 def generate_gpx_content(route_coordinates: List[List[float]], run_details: RunDetails) -> str:
@@ -330,6 +371,36 @@ async def login_user(user_data: UserLogin):
 async def get_current_user_info(current_user: User = Depends(get_current_user)):
     """Get current user information"""
     return current_user
+
+@api_router.post("/upload-gpx")
+async def upload_gpx_file(file: UploadFile = File(...), current_user: User = Depends(get_current_user)):
+    """
+    Uploads a GPX file, parses it, and returns the coordinates.
+    """
+    if not file.filename.endswith(".gpx"):
+        raise HTTPException(status_code=400, detail="Invalid file type. Only GPX files are allowed.")
+
+    try:
+        contents = await file.read()
+        gpx_content_str = contents.decode("utf-8")
+    except Exception as e:
+        logger.error(f"Error reading or decoding GPX file: {e}")
+        raise HTTPException(status_code=400, detail=f"Error reading or decoding GPX file: {e}")
+    finally:
+        await file.close()
+
+    parsed_data = parse_gpx_file(gpx_content_str)
+    coordinates = parsed_data.get("coordinates")
+    route_name = parsed_data.get("name")
+
+    if not coordinates: # Check if coordinates list is empty or None
+        raise HTTPException(status_code=400, detail="Could not parse GPX file or no track points found.")
+
+    response_data = {"coordinates": coordinates}
+    if route_name:
+        response_data["name"] = route_name
+
+    return response_data
 
 # Route management endpoints
 @api_router.post("/routes")
